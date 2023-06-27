@@ -1,6 +1,6 @@
 ---
 title: "Preparing a Stream Network"
-output: rmarkdown::html_vignette
+output: rmarkdown::html_document
 vignette: >
   %\VignetteIndexEntry{shape_prep}
   %\VignetteEngine{knitr::rmarkdown}
