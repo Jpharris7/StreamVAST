@@ -30,11 +30,11 @@ Mill Creek is a small watershed located east of Longview, Washington that is hom
 
 
 ```{r include=FALSE}
-Mill.basin0<-st_read(dsn = "Mill_Creek_basin_raw.shp")
-Mill.redds.sf<-st_read(dsn="Mill_Creek_redds_example.shp")
+Mill.basin0<-st_read(dsn = "vignettes/Mill_Creek_basin_raw.shp")
+Mill.redds.sf<-st_read(dsn="vignettes/Mill_Creek_redds_example.shp")
 Mill.redds<-data.frame(as.data.frame(Mill.redds.sf),lon=st_coordinates(Mill.redds.sf)[,1],lat=st_coordinates(Mill.redds.sf)[,2])
 Mill.basin<-as_sfnetwork(Mill.basin0)
-Mill.surveys<-st_read(dsn="Mill_Creek_surveys_example.shp")
+Mill.surveys<-st_read(dsn="vignettes/Mill_Creek_surveys_example.shp")
 ```
 ```{r echo=FALSE}
 ggplot()+geom_sf(data=Mill.basin0)+theme_bw()+ggtitle("Mill Creek Basin")+scale_x_continuous(breaks=c(-123.28,-123.20),limits = st_bbox(Mill.basin0)[c(1,3)])
