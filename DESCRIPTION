@@ -1,0 +1,29 @@
+Package: StreamVAST
+Title: Tools for using 'VAST' with stream networks
+Version: 0.0.0.9000
+Authors@R: 
+    person("Jeremy", "Harris", , "jeremy.harris@dfw.wa.gov", role = c("aut", "cre"),
+           comment = c(ORCID = "YOUR-ORCID-ID"))
+Description: Data formatting for stream networks for use with 'VAST'.
+    The package provides tools for manipulating stream lines into a network, 
+    associating data with those lines, formatting the data for 'VAST', and plotting
+    the output.
+License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
+    license
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.1
+Imports:
+    stats,
+    utils,
+    graphics,
+    sf,
+    sfnetworks,
+    lwgeom,
+    ggplot2,
+    viridis,
+    FishStatsUtils
+Suggests: 
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
