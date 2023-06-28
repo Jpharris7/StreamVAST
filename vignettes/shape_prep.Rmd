@@ -90,7 +90,7 @@ print(Mill.basin,0)
 The final result should be identified by sfnetworks as "a root tree with spatially explicit edges" and we have now satisfied the assumptions necessary for VAST.
 
 ## Simplifing a network or shape
-The basin contains many branches that are two small for steelhead to spawn or inhabit, so a common first step is to simplify the shape. There are a number of options, but we will use the redd data to extract only the parts of the network where redds have been observed. Other options include using line work, or identifiers in the network object to match or exclude sections.
+The basin contains many branches that are too small for steelhead to spawn or inhabit, so a common first step is to simplify the shape. There are a number of options, but we will use the redd data to extract only the parts of the network where redds have been observed. Other options include using line work, or identifiers in the network object to match or exclude sections.
 
 ```{r warning=FALSE}
 Mill.basin2<-PruneNetwork(network = Mill.basin, root = Mill.root,match = Mill.redds.sf,plot=F)
@@ -104,6 +104,7 @@ ggplot()+
   scale_x_continuous(breaks = c(-123.28,-123.20),limits = st_bbox(Mill.net.edges)[c(1,3)])
 
 ```
+
 The above figure shows the original network in black, the locations of redd observations in blue, and the new stream network in red. The new network reflects all areas that are necessary to connect the observations to the root. This process often leaves some unnecessary nodes in place, and in general it is best to remove them at this stage, unless you wish those nodes preserved in future steps.
 
 ```{r }
@@ -124,34 +125,36 @@ Mill.reaches<-AssignReaches(network = Mill.basin3,targetsize = 3280)
 The process of pruning and assigning reaches typically removes the data attached to the network, so we can reattach it using a simple function. In this case, we will only attach one field. Because the new reaches are unlikely to match the old ones, numeric values for a reach are based on a weighted average of the areas that a reach overlaps, whereas character or factor values are concatenated to make a new value.
 
 
-```{r message=FALSE}
+```{r results="hide", warning=FALSE}
 Mill.reaches2<-AttachData(shape = st_as_sf(activate(Mill.reaches,"edges")),refshape = Mill.basin0,fields = "STRM_NAME")
 ```
 
 We will also run a quick function to check the network has a valid structure and also compute some useful values, such as marking the reachid of the parent, and the distance between segments (measured at the midpoints)
 
-```{r}
+```{r warning=FALSE}
 Mill.reaches3<-CheckNetwork(network=as_sfnetwork(Mill.reaches2),root=Mill.root)
 ```
 
 ## Assemble the Data
 
-Now that we have a fully processed and valid network, and have assigned our reaches, it is time to assemble it into a data frame.For this example, data are collected if surveys that cover a segment of the stream and can be defined as a start and end point. These points are used to determine which reaches were observed on each date, and the extent of the reach that was observed is recorded as "effort", which will become the offset in the VAST model. Counts can be computed at the survey level, or as distinct observations (redds). Surveys should be formatted as an sf object with a LINESTRING for each survey or transect, and this LINESTRING should be reasonably close to the linework used in the network. This package includes two functions that can help construct necessary survey object:
--MakeSurveyTracks: Uses start and stop coordinates to trace a path along the network
--RiverMeasureLL: Converts river measures to Lat/Lon, or vice versa
+Now that we have a fully processed and valid network, and have assigned our reaches, it is time to assemble it into a data frame. For this example, data are collected if surveys that cover a segment of the stream and can be defined as a start and end point. These points are used to determine which reaches were observed on each date, and the extent of the reach that was observed is recorded as "effort", which will become the offset in the VAST model. Counts can be computed at the survey level, or as distinct observations (redds). Surveys should be formatted as an sf object with a LINESTRING for each survey or transect, and this LINESTRING should be reasonably close to the linework used in the network. This package includes two functions that can help construct necessary survey object:  
+-MakeSurveyTracks: Uses start and stop coordinates to trace a path along the network  
+-RiverMeasureLL: Converts river measures to Lat/Lon, or vice versa  
 
 If there are numerous surveys, this function can be time consuming
 Future versions will have expanded capabilities to also handle data collected at discreet points, such as dams or weirs.
 
 The final step is to combine the spatial reaches, our surveys, and any other data. This last function will use the survey tracks to determine the amount of effort applied to each reach on a given date, which will become the offset for the VAST model. Separately, it will also match observations to each survey, and this allows the observed counts and density for each reach on each date to be calculated and used in the model. In this example, each observation has its own coordinates, but a total count for the survey can also be used (in which case, the function assumes observations are evenly spaced, equivalent to constant density over the surveyed area. Note that with large datasets, this step may take several hours.
 
-```{r message=FALSE}
+```{r results="hide", warning=FALSE,}
 
 Mill.data<-AssembleReddData(shape = Mill.reaches3,georedds = Mill.redds,georedds.coords = c("lon","lat"),reddcrs = 2286,surveys = Mill.surveys)
+```
+```{r}
 head(Mill.data)
 
 ```
 
-In the next chapter 
+In the next chapter, We will explore some additional options for formatting the data for use in VAST, and how to ensure that the necessary accessory objects and dataframes are ready for VAST package functions.
 
 
