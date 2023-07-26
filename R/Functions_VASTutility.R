@@ -2,45 +2,49 @@
 
 #let's make a function wrapper for all the preliminary setup
 # outputs a list with the necessay components, and a diagnostic plots
-#' Loads Stream data for VAST
+#' Final formatting of Stream data for VAST
 #'
-#' Loads and does some basic processing for previously saved data;
-#' Unlikely to be generally useful
+#' Provides some final formatting and convenience steps before using VAST
 #'
-#' @param watershed A name for the folders and files
-#' @param size a size used to identify the correct files
+#' @param counts A data frame with count data, presumably from AssembleReddData, or a filename
+#' @param reaches A sf lines object, presumably from other StreamVAST functions, or a filename
+#' @param surveys An optional set of surveys, presumably from MakeSurveyTracks, or a filename
 #' @param unit.conv A conversion used for distance units, can set to 1
 #'
 #' @return A list with several elements necessary for VAST
 #' @export
 #'
 #' @examples
-LoadStreamData<-function(watershed,size,unit.conv=.0003048){
+FormatStreamData<-function(counts,reaches,surveys,unit.conv=.0003048){
 
-  redddata<-utils::read.csv(paste0(watershed,"/",watershed,"_",size,"m_data.csv"))
-  reachdata<-sf::st_read(paste0(watershed,"/",watershed,"_",size,"m_reaches.shp"))
-  surveydata<-sf::st_read(paste0(watershed,"/",watershed,"_surveys.shp"))
+  # read in the data, either directly or from a file
+  countdata<-counts
+  if(class(counts)=="character"){countdata<-utils::read.csv(counts)}
+  reachdata<-reaches
+  if(class(reaches)=="character"){reachdata<-sf::st_read(reaches)}
+  surveydata<-surveys
+  if(class(surveys)=="character"){surveydata<-sf::st_read(surveys)}
 
   # Calculate some values that aren't in the data already
   reachdata$Length<-as.numeric(sf::st_length(reachdata))*unit.conv  # convert feet to km
-  redddata$Area<-reachdata$Length[match(redddata$Reach,reachdata$reachid)]
-  redddata$Effort<-redddata$Effort*unit.conv
+  countdata$Area<-reachdata$Length[match(countdata$Reach,reachdata$reachid)]
+  countdata$Effort<-countdata$Effort*unit.conv
 
   # This needs to be made more general
-  if(all(c("Redds_NR","Redds_SV")%in%names(redddata))){
-    redddata$Redds_Total<-redddata$Redds_NR+redddata$Redds_SV
-    redddata$Density_Total<-redddata$Redds_Total/redddata$Effort
+  if(all(c("Redds_NR","Redds_SV")%in%names(countdata))){
+    countdata$Redds_Total<-countdata$Redds_NR+countdata$Redds_SV
+    countdata$Density_Total<-countdata$Redds_Total/countdata$Effort
   }else{
-    redddata$Density_Total<-redddata$Redds/redddata$Effort
+    countdata$Density_Total<-countdata$Redds/countdata$Effort
   }
 
   # account for different capitalizations of day
-  names(redddata)[names(redddata)%in%c("Day","day")]<-"Day"
+  names(countdata)[names(countdata)%in%c("Day","day")]<-"Day"
   names(surveydata)[names(surveydata)%in%c("Day","day")]<-"Day"
 
-  data.dates<-as.Date(paste(redddata$Year,redddata$Day,sep="_"),format="%Y_%j")
-  redddata$Month<-format(data.dates,format="%b")
-  redddata$Week<-ceiling(redddata$Day/7)
+  data.dates<-as.Date(paste(countdata$Year,countdata$Day,sep="_"),format="%Y_%j")
+  countdata$Month<-format(data.dates,format="%b")
+  countdata$Week<-ceiling(countdata$Day/7)
 
   # Next set up the spatial inputs. These are consistent and do not change unless you load a new data set
   # we designate the prediction and sampling knots as being at the midpoint of each reach
@@ -83,17 +87,17 @@ LoadStreamData<-function(watershed,size,unit.conv=.0003048){
 
   # diagnostics, make sure the data is valid
   plot1<-ggplot2::ggplot()+
-    ggplot2::geom_point(data=redddata,ggplot2::aes(x=Day,y=Year),size=3,col=1)+
+    ggplot2::geom_point(data=countdata,ggplot2::aes(x=Day,y=Year),size=3,col=1)+
     ggplot2::geom_point(data=surveydata,ggplot2::aes(x=Day,y=Year),size=1,col=2)+ggplot2::theme_bw()
   print(plot1)
 
   plot3<-ggplot2::ggplot()+
     ggplot2::geom_sf(data=reachdata$geometry,lwd=4)+
     ggplot2::geom_sf(data=surveydata$geometry,lwd=2,col=2)+
-    ggplot2::geom_sf(data=reachdata$geometry[reachdata$reachid%in%redddata$Reach],lwd=1,col=4)+ggplot2::theme_bw()
+    ggplot2::geom_sf(data=reachdata$geometry[reachdata$reachid%in%countdata$Reach],lwd=1,col=4)+ggplot2::theme_bw()
   print(plot3)
 
-  return(list(redddata,reachdata,surveydata,vastinput,vastnetwork,vastnetworkLL))
+  return(list(countdata,reachdata,surveydata,vastinput,vastnetwork,vastnetworkLL))
 }
 
 

@@ -12,6 +12,6 @@ EditFeatures(shape, root)
 \item{root}{A sf POINT for the root (might be obsolete)}
 }
 \description{
-Allows the user to add points or remove elements by selecting them from the plot window
+Allows the user to add points or remove features by selecting them from the plot window
 and command line prompts
 }

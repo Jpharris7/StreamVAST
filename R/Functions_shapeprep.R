@@ -306,10 +306,10 @@ LocateFeature<-function(shape,type){
   still.going<-T
   while(still.going){
     # start by plotting the network and show any updates
-    plot(sf::st_geometry(shape.edges),xlim=c(midpoint[1]-xspan/2,midpoint[1]+xspan/2),
+    plot(sf::st_geometry(shape.edges2),xlim=c(midpoint[1]-xspan/2,midpoint[1]+xspan/2),
          ylim=c(midpoint[2]-yspan/2,midpoint[2]+yspan/2),pch=16)
-    plot(sf::st_geometry(shape.nodes),pch=16,add=T,col=1)
-    plot(out.sf,add=T,col=4,pch=16,cex=1.25,lwd=1.25)
+    plot(sf::st_geometry(shape.nodes2),pch=16,add=T,col=1)
+    plot(sf::st_geometry(out.sf),add=T,col=4,pch=16,cex=1.25,lwd=1.25)
 
     # user chooses an action
     response<-readline(prompt="Choose an action : CENTER/zoomIN/zoomOUT/SELECT/FINISH")
@@ -379,7 +379,7 @@ LocateFeature<-function(shape,type){
 
 #' Edit a shape or network in real time
 #'
-#' Allows the user to add points or remove elements by selecting them from the plot window
+#' Allows the user to add points or remove features by selecting them from the plot window
 #' and command line prompts
 #'
 #' @param shape A sf or sfnetworks object to be editted
@@ -586,6 +586,120 @@ EditFeatures<-function(shape,root){
   return(temp.net)
 }
 
+
+#' Add nodes or edges to a sfnetwork
+#'
+#' This function adds additional nodes or edge segments to a network. Before adding anything, it checks that the new features
+#' are distinct from pre-existing features, and that they are relatively close to the existing network.
+#' Note, this function has not been tested extensively.
+#'
+#' @param network a sfnetwork object
+#' @param nodes a data frame with lon and lat columns, or sf object with POINT geometry
+#' @param edges a sf object with LINESTRING geometry that includes edges to be added
+#' @param crs a crs object, if nodes or edges has a different crs from network
+#' @param tolerance a maximum distance for snapping a shape to the network, shapes outside this tolerance are removed
+#' @param tolerance2 a maximum distance for snapping nodes together, new nodes within this tolerance are not distinct from existing nodes
+#'
+#' @return A sfnetwork with the indicated nodes added
+#' @export
+#'
+#' @examples
+AddFeatures<-function(network,nodes,edges,crs,tolerance=200,tolerance2=10){
+
+  old.net<-network
+  if(class(network)[1]!="sfnetwork"){
+    print("Converting shape to sfnetwork")
+    network<-Makesfnetwork(network)
+  }
+  network.edges<-sf::st_as_sf(sfnetworks::activate(network,"edges"))
+  network.nodes<-sf::st_as_sf(sfnetworks::activate(network,"nodes"))
+
+  if(missing(crs)){crs<-sf::st_crs(network)}
+
+  # do edges first
+  if(missing(edges)==F){
+    if(class(edges)[1]!="sf" | sf::st_geometry_type(edges)!="LINESTRING"){stop("Edges must be a sf object with LINESTRING geometry")}
+    edges2<-sf::st_transform(edges,crs = crs)
+    coords<-as.data.frame(sf::st_coordinates(edges2))
+    nbad<-0
+    for(i in 1:nrow(edges)){
+      line.dat<-subset(coords,L1==i)
+
+      start.node<-sf::st_as_sf(line.dat[1,],coords=1:2,crs=crs)
+      end.node<-sf::st_as_sf(line.dat[nrow(line.dat),],coords=1:2,crs=crs)
+
+      start.good<-any(as.numeric(sf::st_distance(start.node,network.edges))<=tolerance)
+      end.good<-any(as.numeric(sf::st_distance(end.node,network.edges))<=tolerance)
+
+      # now check for redundant nodes, and then update
+      if(any(c(start.good,end.good))){
+        if(start.good){
+          add.start<-any(as.numeric(sf::st_distance(start.node,network.nodes))<=tolerance2)==F
+          if(add.start){
+            network<-sfnetworks::st_network_blend(x = network,y = sf::st_geometry(start.node))
+          }
+        }
+        if(end.good){
+          add.end<-any(as.numeric(sf::st_distance(end.node,network.nodes))<=tolerance2)==F
+          if(add.end){network<-sfnetworks::st_network_blend(x = network,y = sf::st_geometry(end.node))}
+        }
+        # update the network
+        network.edges<-sf::st_as_sf(sfnetworks::activate(network,"edges"))
+        network.nodes<-sf::st_as_sf(sfnetworks::activate(network,"nodes"))
+
+        # now the new nodes are in there, so let's add the linestring; no fancy transformation
+        line.dat2<-line.dat[,1:2]
+        if(start.good){
+          start.node2<-network.nodes[sf::st_nearest_feature(x = start.node,y=network.nodes),]
+          coords.start2<-as.data.frame(sf::st_coordinates(start.node2))
+          line.dat2[1,]<-coords.start2
+        }
+        if(end.good){
+          end.node2<-network.nodes[sf::st_nearest_feature(x = end.node,y=network.nodes),]
+          coords.end2<-as.data.frame(sf::st_coordinates(end.node2))
+          line.dat2[nrow(line.dat2),]<-coords.end2
+        }
+
+        #update the network
+        new.edges<-c(st_geometry(network.edges),sf::st_cast(sf::st_combine(sf::st_as_sf(line.dat2,coords=1:2,crs=crs)),"LINESTRING"))
+        network<-as_sfnetwork(new.edges)
+        network.edges<-sf::st_as_sf(sfnetworks::activate(network,"edges"))
+        network.nodes<-sf::st_as_sf(sfnetworks::activate(network,"nodes"))
+      }else{
+        nbad<-nbad+1
+      }
+    }
+    if(nbad>0){warning("Unable to add ",nbad," out of ",nrow(edges)," lines to the network")}
+  }
+
+  # start by getting all the nodes set up
+  if(missing(nodes)==F){
+    if(class(nodes)[1]=="data.frame"){
+      if(any((c("lon","lat")%in%names(nodes))==F)){stop("Invalid data frame for nodes. Must contain columns named 'lon' and 'lat'")}
+      node.points<-sf::st_as_sf(nodes[,c("lon","lat")],coords=1:2,crs=crs)
+    }
+    if(class(nodes)[1]=="sf"){
+      if(any(sf::st_geometry_type(nodes)!="POINT")){stop("Nodes must have POINT geometry")}
+      node.points<-sf::st_transform(nodes,crs = crs)
+    }
+
+    # check that the points are on the network
+    dist.mat<-sf::st_distance(x = node.points,y = network.edges)
+    good.points<-node.points[apply(dist.mat,MARGIN = 1,FUN = function(x){return(any(as.numeric(x)<=tolerance))}),]
+
+    if(nrow(good.points)<nrow(node.points)){warning(paste0("Failed to snap ",nrow(node.points)-nrow(good.points)," to the network"))}
+
+    # check if the nodes are redundant
+    dist.mat2<-sf::st_distance(x = good.points,y = network.nodes)
+    add.points<-good.points[apply(dist.mat2,MARGIN = 1,FUN = function(x){return(all(as.numeric(x)>tolerance2))}),]
+    if(nrow(add.points)>0){
+      network<-sfnetworks::st_network_blend(x = network,y = add.points)
+    }
+  }
+  return(network)
+}
+
+
 #short function that removes internal nubs and any small terminal segments
 #' Simplifies a sfnetwork
 #'
@@ -760,12 +874,11 @@ ExtractBasin<-function(shape,root,basin,exclude){
 }
 
 
-# this function will extract data from a reference shape and attach that data to a network
-# note, be careful with ID keys that have the form of numbers
 #' Attach Data to a network
 #'
 #' Take data contained in one sf LINESTRING object and attaches it to a network.
-#' Values are averaged or combined where appropriate
+#' Values are averaged or combined where appropriate. Take care with ID numbers or coded data that may appear numeric,
+#' but is not meant to be combined or averaged.
 #'
 #' @param shape A sfnetwork or sf object with LINESTRING geometry to attach data to
 #' @param refshape A sf object with LINESTRING geometry that contains the desired data
@@ -1044,14 +1157,14 @@ PruneNetwork<-function(network,root,exclude,match,tolerance=100,plot=T){
 #' The setnodes argument can be used to ensure certain reach boundaries (not implemented yet)
 #'
 #' @param network A sfnetwork
-#' @param targetsize a desired size to
-#' @param setnodes not working yet
+#' @param targetsize a desired size to use for reaches
+#' @param habitat a logical vector that identifies areas of habitat (T) vs non-habitat (F)
 #'
 #' @return A new sfnetwork object divided into reaches of approximately the correct size
 #' @export
 #'
 #' @examples
-AssignReaches<-function(network,targetsize=100,setnodes){
+AssignReaches<-function(network,targetsize=100,habitat){
 
   if(class(network)[1]!="sfnetwork"){
     print("Converting shape to sfnetwork")
@@ -1060,68 +1173,62 @@ AssignReaches<-function(network,targetsize=100,setnodes){
   network.edges<-sf::st_as_sf(sfnetworks::activate(network,"edges"))
   network.nodes<-sf::st_as_sf(sfnetworks::activate(network,"nodes"))
 
-  # we don't want reach boundaries to run over stream junctions, so we track branches individually
-  connection.table<-table(c(network.edges$from,network.edges$to))
-  end.nodes<-which(connection.table==1)
-  branch.nodes<-which(connection.table>2)
-
-  if(nrow(network.edges)>1){
-    network.union<-sf::st_as_sf(sf::st_line_merge(sf::st_union(network.edges)))
+  # Set up the habitat distinctions
+  if(missing(habitat)){
+    habitat2<-rep(TRUE,nrow(network.edges))
   }else{
-    network.union<-network.edges
+    if(is.logical(habitat)){
+      if(length(habitat)!=nrow(network.edges)){stop("Length of 'habitat' does not match # of edges")}
+      habitat2<-habitat
+    }
+    if(is.integer(habitat)){
+      if(any(habitat>nrow(network.edges)) | any(habitat<1)){stop("Invalid index in 'habitat'")}
+      habitat2<-rep(FALSE,nrow(network.edges))
+      habitat2[habitat]<-TRUE
+    }
+    if(is.logical(habitat)==F & is.integer(habitat)==F){stop("Invalid input for 'habitat'")}
   }
-
-  if(length(branch.nodes)>0){
-    major.branches0<-lwgeom::st_split(x = network.union,y=network.nodes[branch.nodes,])
-    major.branches<-sf::st_collection_extract(major.branches0,"LINESTRING")
-  }else{
-    major.branches<-network.union
-  }
+  network.edges$habitat<-habitat2
 
   # we want to identify the best size before diving into the loop
-  netlength<-sum(sf::st_length(network.union))
-  branch.lengths<-sf::st_length(major.branches)
-
+  reach.lengths<-sf::st_length(network.edges)
   size.range<-targetsize*90:110/100
-  targetsize.vec<-rep(size.range,each=nrow(major.branches))
+  targetsize.vec<-rep(size.range,each=nrow(network.edges))
 
-  mod.mat<-matrix(nrow=21,ncol=nrow(major.branches),data=branch.lengths%%targetsize.vec,byrow=T)
-  bestsize<-size.range[which.min(apply(mod.mat,1,sum))]
-  nreaches.vec<-as.integer(round(branch.lengths/bestsize))
+  mod.mat<-matrix(nrow=21,ncol=nrow(network.edges),data=reach.lengths%%targetsize.vec,byrow=T)
+  if(any(network.edges$habitat==F)){mod.mat[,which(network.edges$habitat==F)]<-NA}
+  bestsize<-size.range[which.min(apply(mod.mat,1,sum,na.rm=T))]
+  nreaches.vec<-as.integer(round(reach.lengths/bestsize))
+  nreaches.vec[nreaches.vec==0]<-1
 
   print(paste0("Using reach size of ",bestsize))
-  for(i in 1:nrow(major.branches)){
-    branch<-major.branches[i,]
-    nreach<-max(nreaches.vec[i],1)     # if less, than 1 reach, round up to 1
+  for(i in 1:nrow(network.edges)){
 
-    reach.nodes0<-sf::st_line_sample(x = branch,sample = c(0,1/nreach*1:(nreach-1),1))
-    reach.nodes<-sf::st_as_sf(as.data.frame(sf::st_coordinates(reach.nodes0)),coords=1:2,
-                              crs=sf::st_crs(network))
+    reach<-network.edges[i,]
 
-    if(nreach==1){
-      reach.net<-sfnetworks::as_sfnetwork(branch)
+    if(nreaches.vec[i]==1 | network.edges$habitat[i]==F){
+      out.edges0<-reach
     }else{
-      reach.net<-sfnetworks::st_network_blend(sfnetworks::as_sfnetwork(branch),reach.nodes)
+      reach.nodes0<-sf::st_line_sample(x = reach,sample = c(0,1/nreaches.vec[i]*1:(nreaches.vec[i]-1),1))
+      reach.nodes<-sf::st_as_sf(sf::st_cast(reach.nodes0,"POINT"))
+
+      reach.net<-suppressWarnings(sfnetworks::st_network_blend(sfnetworks::as_sfnetwork(reach),reach.nodes))
+      out.edges0<-sf::st_as_sf(sfnetworks::activate(reach.net,"edges"))
     }
 
-    reach.edges<-sf::st_as_sf(sfnetworks::activate(reach.net,"edges"))
-    sf::st_geometry(reach.edges)<-"geometry"
-
+    sf::st_geometry(out.edges0)<-"geometry"
     if(i==1){
-      out.edges<-reach.edges[,"geometry"]
+      out.edges<-out.edges0
     }else{
-      out.edges<-rbind(out.edges,reach.edges[,"geometry"])
+      out.edges<-rbind(out.edges,out.edges0)
     }
   }
-  out.edges$reachid<-1:nrow(out.edges)
+  out.edges$reachid<-1L:nrow(out.edges)
 
   return(sfnetworks::as_sfnetwork(out.edges))
 }
 
 
-#
-# a
-#
 #' Check a network and correct common problems
 #'
 #' this function checks that the direction of the stream network is away from the root
@@ -1182,20 +1289,50 @@ CheckNetwork<-function(network,root){
   new.edges$reachid<-network.table$newid[match(new.edges$reachid,network.table$oldid)]
   new.edges<-new.edges[order(new.edges$reachid),]
 
-  # now can compute the parents
+  # now can compute the parents, though this is going to be complicated by habitat/nonhabitat
   new.edges$parent<-new.edges$reachid[match(new.edges$from,new.edges$to)]
 
-  # let's also compute the distance between the midpoint of each parent and child
-  # rather than do anything fancy, the distance between midpoints of two adjacent segments is
-  # just half the length of segment A + half the length of segment B
-  new.lengths<-sf::st_length(new.edges)
-  new.edges$parent.distance<-.5*new.lengths+.5*new.lengths[new.edges$parent]
+  new.parent.vec<-rep(NA,nrow(new.edges))
+  parent.distance.vec<-rep(NA,nrow(new.edges))
+
+  # now account for habitat
+  for(i in 1:nrow(new.edges)){
+    if(new.edges$root[i]==F){
+      parent<-new.edges$parent[i]
+      # if the parent is habitat, things are easy
+      if(new.edges$habitat[parent]){
+        new.parent.vec[i]<-parent
+        parent.distance.vec[i]<-.5*sf::st_length(new.edges)[i]+.5*sf::st_length(new.edges)[parent]
+      }else{
+        # loop through to parent is easier than converting to network
+        bad.parent<-T
+        path.segs<-parent
+        active.seg<-parent
+        while(bad.parent){
+          new.parent<-new.edges$parent[active.seg]
+          if(new.edges$habitat[new.parent]){
+            bad.parent<-F
+          }else{
+            path.segs<-c(path.segs,new.parent)
+            active.seg<-new.parent
+          }
+        }
+        new.parent.vec[i]<-new.parent
+        parent.distance.vec[i]<-.5*sf::st_length(new.edges)[i]+.5*sf::st_length(new.edges)[new.parent]+
+          sum(sf::st_length(new.edges)[path.segs])
+      }
+    }
+  }
+
+  new.edges$parent<-new.parent.vec
+  new.edges$parent.distance<-as.numeric(parent.distance.vec)
 
   return(sfnetworks::as_sfnetwork(new.edges))
 }
 
+
 #This is a new function that separates out the survey tracks
-#' Makes sf LINeSTRINGs representing survey transects
+#' Makes sf LINESTRINGs representing survey transects
 #'
 #' This function uses coordinates to locate the start and stop points for a survey
 #' and then draws a line that follows the stream contours between those points.
@@ -1229,8 +1366,8 @@ MakeSurveyTracks<-function(shape, surveys,surveys.crs="wgs84",save.col="all",
   }
 
   # need to turn the surveys in line objects
-  shape.union<-sf::st_geometry(shape)
-  if(nrow(shape)>1 | any(sf::st_geometry_type(shape)=="MULTILINESTRING")){
+  shape.union<-sf::st_geometry(shape.edges)
+  if(nrow(shape.edges)>1 | any(sf::st_geometry_type(shape.edges)=="MULTILINESTRING")){
     shape.union<-sf::st_line_merge(sf::st_union(shape.edges))
   }
 
@@ -1268,7 +1405,7 @@ MakeSurveyTracks<-function(shape, surveys,surveys.crs="wgs84",save.col="all",
       pt1<-nearest1[which.min(sf::st_length(nearest1))]
       if(as.numeric(sf::st_length(pt1))<=maxdist){
         start<-sf::st_as_sf(as.data.frame(sf::st_coordinates(pt1))[2,1:2],coords=1:2,
-                           crs=sf::st_crs(shape.union))
+                            crs=sf::st_crs(shape.union))
         start.seg<-shape.union[which.min(sf::st_length(nearest1))]
       }
       nearest2<-sf::st_nearest_points(test.point[2,],shape.union)
@@ -1568,7 +1705,7 @@ AssembleReddData<-function(shape,                  # shape or network organized 
   # Setup any georeferenced redds, should improve handling of dates so that it's not just assumed to be in
   # correct format
   if(is.data.frame(georedds)){
-
+    print("Formatting georeferenced counts")
     if(is.na(georedds.coords)[1]){
       lon.col<-which(tolower(names(georedds))%in%c("longitude","lon","long","x"))[1]
       lat.col<-which(tolower(names(georedds))%in%c("latitude","lat","y"))[1]
@@ -1576,7 +1713,6 @@ AssembleReddData<-function(shape,                  # shape or network organized 
       lon.col<-georedds.coords[1]
       lat.col<-georedds.coords[2]
     }
-
 
     badrow<-which(is.na(georedds[,lon.col]) | is.na(georedds[,lat.col]))
     if(length(badrow)>0){
@@ -1694,6 +1830,7 @@ AssembleReddData<-function(shape,                  # shape or network organized 
   reach.match<-match(out.data$Reach,shape.edges$reachid)
   out.data<-cbind(out.data,as.data.frame(shape.edges)[reach.match,var.col])
   rownames(out.data)<-NULL
+
   return(out.data)
 }
 

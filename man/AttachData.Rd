@@ -22,5 +22,6 @@ A sfnetwork consisting of the original shape with data attached now
 }
 \description{
 Take data contained in one sf LINESTRING object and attaches it to a network.
-Values are averaged or combined where appropriate
+Values are averaged or combined where appropriate. Take care with ID numbers or coded data that may appear numeric,
+but is not meant to be combined or averaged.
 }

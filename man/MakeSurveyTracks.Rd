@@ -2,7 +2,7 @@
 % Please edit documentation in R/Functions_shapeprep.R
 \name{MakeSurveyTracks}
 \alias{MakeSurveyTracks}
-\title{Makes sf LINeSTRINGs representing survey transects}
+\title{Makes sf LINESTRINGs representing survey transects}
 \usage{
 MakeSurveyTracks(
   shape,
