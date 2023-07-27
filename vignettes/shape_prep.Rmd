@@ -2,7 +2,7 @@
 title: "Preparing a Stream Network"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{shape_prep}
+  %\VignetteIndexEntry{Preparing a Stream Network}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
