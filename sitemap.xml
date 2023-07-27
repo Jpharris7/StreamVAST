@@ -1,96 +1,96 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/404.html</loc>
+    <loc>/404.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/articles/index.html</loc>
+    <loc>/articles/index.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/articles/shape_prep.html</loc>
+    <loc>/articles/shape_prep.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/authors.html</loc>
+    <loc>/authors.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/index.html</loc>
+    <loc>/index.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/AddFeatures.html</loc>
+    <loc>/reference/AddFeatures.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/AssembleReddData.html</loc>
+    <loc>/reference/AssembleReddData.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/AssignReaches.html</loc>
+    <loc>/reference/AssignReaches.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/AttachData.html</loc>
+    <loc>/reference/AttachData.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/CheckNetwork.html</loc>
+    <loc>/reference/CheckNetwork.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/EditFeatures.html</loc>
+    <loc>/reference/EditFeatures.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/ExtractBasin.html</loc>
+    <loc>/reference/ExtractBasin.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/FindRoots.html</loc>
+    <loc>/reference/FindRoots.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/FixLoops.html</loc>
+    <loc>/reference/FixLoops.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/FormatStreamData.html</loc>
+    <loc>/reference/FormatStreamData.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/index.html</loc>
+    <loc>/reference/index.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/LocateFeature.html</loc>
+    <loc>/reference/LocateFeature.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/LocateRoot.html</loc>
+    <loc>/reference/LocateRoot.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/Makesfnetwork.html</loc>
+    <loc>/reference/Makesfnetwork.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/MakeSurveyTracks.html</loc>
+    <loc>/reference/MakeSurveyTracks.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/MakeVASTData.html</loc>
+    <loc>/reference/MakeVASTData.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/plotPredictionMap.html</loc>
+    <loc>/reference/plotPredictionMap.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/plotStream.html</loc>
+    <loc>/reference/plotStream.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/PointSetup.html</loc>
+    <loc>/reference/PointSetup.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/PruneNetwork.html</loc>
+    <loc>/reference/PruneNetwork.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/RiverMeasureLL.html</loc>
+    <loc>/reference/RiverMeasureLL.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/RootNetwork.html</loc>
+    <loc>/reference/RootNetwork.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/SimplifyNetwork.html</loc>
+    <loc>/reference/SimplifyNetwork.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/VASTeval.html</loc>
+    <loc>/reference/VASTeval.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/VASTpreds.html</loc>
+    <loc>/reference/VASTpreds.html</loc>
   </url>
   <url>
-    <loc>https://jpharris7.github.io/StreamVAST/reference/VASTtotals.html</loc>
+    <loc>/reference/VASTtotals.html</loc>
   </url>
 </urlset>

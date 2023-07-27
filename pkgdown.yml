@@ -3,8 +3,5 @@ pkgdown: 2.0.6
 pkgdown_sha: ~
 articles:
   shape_prep: shape_prep.html
-last_built: 2023-07-27T18:17Z
-urls:
-  reference: https://jpharris7.github.io/StreamVAST/reference
-  article: https://jpharris7.github.io/StreamVAST/articles
+last_built: 2023-07-27T18:38Z
 
