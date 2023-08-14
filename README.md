@@ -16,7 +16,7 @@ If this doesn't work, consider leaving out the vignettes, as these are under dev
 remotes::install_github("Jpharris7/StreamVAST", build_vignettes = FALSE)
 ```
 ## Shape and Data Prep
-This section is demonstrates how to format and clean a set of lines, convert it into a network, root the network, remove unnecessary sections, and associate various types of data with the network. [Preparing a Stream Network](articles/shape_prep.html)
+This section is demonstrates how to format and clean a set of lines, convert it into a network, root the network, remove unnecessary sections, and associate various types of data with the network. [Preparing a Stream Network](https://jpharris7.github.io/StreamVAST/articles/shape_prep.html)
 
 ## Formating and Running VAST
 The tutorial for this section is under construction.
