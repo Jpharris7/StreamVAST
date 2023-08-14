@@ -19,16 +19,17 @@ FormatStreamData<-function(counts,reaches,surveys,unit.conv=.0003048){
 
   # read in the data, either directly or from a file
   countdata<-counts
-  if(class(counts)=="character"){countdata<-utils::read.csv(counts)}
+  if(class(counts)[1]=="character"){countdata<-utils::read.csv(counts)}
   reachdata<-reaches
-  if(class(reaches)=="character"){reachdata<-sf::st_read(reaches)}
+  if(class(reaches)[1]=="character"){reachdata<-sf::st_read(reaches)}
   surveydata<-surveys
-  if(class(surveys)=="character"){surveydata<-sf::st_read(surveys)}
+  if(class(surveys)[1]=="character"){surveydata<-sf::st_read(surveys)}
 
   # Calculate some values that aren't in the data already
   reachdata$Length<-as.numeric(sf::st_length(reachdata))*unit.conv  # convert feet to km
   countdata$Area<-reachdata$Length[match(countdata$Reach,reachdata$reachid)]
   countdata$Effort<-countdata$Effort*unit.conv
+  countdata$prnt_ds<-as.numeric(countdata$parent.distance*unit.conv)
 
   # This needs to be made more general
   if(all(c("Redds_NR","Redds_SV")%in%names(countdata))){
@@ -62,8 +63,7 @@ FormatStreamData<-function(counts,reaches,surveys,unit.conv=.0003048){
     up.next<-min(reachdata$reachid[reachdata$reachid%in%needs.doing & reachdata$parent%in%already.done])
     index<-which(reachdata$reachid==up.next)
     parent.index<-which(reachdata$reachid==reachdata$parent[index])
-    reachdata$streamdist[index]<-reachdata$streamdist[parent.index]+(reachdata$Length[parent.index]/2)+
-      (reachdata$Length[index]/2)
+    reachdata$streamdist[index]<-reachdata$streamdist[parent.index]+reachdata$prnt_ds[parent.index]
 
     needs.doing<-needs.doing[needs.doing!=up.next]
     already.done<-c(already.done,up.next)

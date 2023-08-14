@@ -1,0 +1,75 @@
+---
+title: "Fitting a VAST Model"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Fitting a VAST Model}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup, warning=FALSE}
+library(StreamVAST)
+library(sf)
+library(ggplot2)
+library(sfnetworks)
+```
+
+# Fitting a VAST Model to Stream Network Data
+This is the second chapter explaining how to use the functions in the StreamVAST package. For information on how to prepare and format data, please refer to the previous chapter [Preparing a Stream Network](articles/shape_prep.html)
+
+In the previous chapter, we imported data for steelhead salmon redds in the Mill Creek watershed, in Washington State. The two most important data objects are a data frame with the dates and locations of redds, and an sf object with LINESTRINGS defining the different segments of the network. A third object, the set of survey tracks is also useful. Future versions of this package will make use of S3 classes to streamline the tracking of these objects.
+
+```{r include=FALSE, results="hide"}
+Mill.data<-read.csv("Mill_data.csv")
+Mill.reaches<-st_read("Mill_reaches.shp")
+Mill.surveys<-st_read("Mill_survey_tracks.shp")
+```
+
+```{r}
+head(Mill.data)
+```
+
+```{r}
+print(Mill.reaches,n = 4)
+```
+
+## Additional formatting for VAST
+There are a few more minor formatting tasks that need to be completed before we can fit a model. We need to draw information from Mill.reaches to add an "Area" column that tracks the total area in each reach, separate from the "Effort". We will also take this opportunity to convert units from feet into km. The date will also be converted into a variety of formats (statistical week, Month) that will be useful later. The objects are returned as elements of a list. 
+
+```{r}
+Mill.list<-FormatStreamData(counts = Mill.data,reaches = Mill.reaches,surveys = Mill.surveys,unit.conv = .0003048)
+Redd.data<-Mill.list[[1]]
+Reach.data<-Mill.list[[2]]
+Survey.data<-Mill.list[[3]]
+
+vast.input0<-Mill.list[[4]]
+vast.network<-Mill.list[[5]]
+vast.networkLL<-Mill.list[[6]]
+```
+
+We also need to produce a set of auxiliary data frames that VAST will use to determine the spatial relationships, and each of these objects requires a very specific format with specific columns and names. These are returned as elements 4-6 of the list. The object "vast.input0" requires Lon and Lat coordinates (from the midpoint of each reach), a column named "child_i" which is equivalent to the reach id, and a column for "Area_km2", which is equivalent the Area calculated above (note that we are treating stream lengths as if they are areas). We will need to further modify this object later, after choosing a temporal resolution.
+"Vast.network" and "vast.network.LL" are nearly identical, except for one having Lon and Lat columns. Both require columns for "child_s" which is the reach id, "parent_s" which is the id of the parent, and "dist_s" which is what we have been calling "parent.distance". Note that for the root, "parent_s" must be set to 0, and "dist_s" must be set to Inf. 
+
+## Choosing a temporal resolution
+Depending on the system being modeled, a variety of temporal resolutions are possible. 
+
+
+## An example in VAST
+From this point, we will use VAST functions to setup and run the model, and the example code here should be used as a guide. The user is advised to review the documentation for VAST, which contains extensive options for how to customize your model.
+
+## Preliminary checks
+
+
+
+
+
+In the final chapter, StreamVAST provides some functions that allow users to conveniently extract predictions or residuals from the VAST model, and demonstrates some plotting functions that may be useful to evaluate or present the results of a model. 
+
+
+
