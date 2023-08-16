@@ -8,6 +8,8 @@ StreamVAST contains a variety of functions to guide users in converting linework
 This package is still in the early phases of development, and users should expect frequent updates and changes.
 ## Installation
 It is strongly recommended that users first install the VAST package and its dependencies. 
+
+To install StreamVAST, use this code:
 ```
 remotes::install_github("Jpharris7/StreamVAST")
 ```
@@ -19,7 +21,6 @@ remotes::install_github("Jpharris7/StreamVAST", build_vignettes = FALSE)
 This section is demonstrates how to format and clean a set of lines, convert it into a network, root the network, remove unnecessary sections, and associate various types of data with the network. [Preparing a Stream Network](https://jpharris7.github.io/StreamVAST/articles/shape_prep.html)
 
 ## Formating and Running VAST
-The tutorial for this section is under construction.
-
+This section shows how to use the network and the associated data to produce a model using VAST functions, and provides some basic advice for choosing settings and other features. [Fitting a VAST Model](https://jpharris7.github.io/StreamVAST/articles/model_fitting.html)
 ## Plots and outputs
 The tutorial for this section is under construction.
