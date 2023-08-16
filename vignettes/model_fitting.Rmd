@@ -40,7 +40,7 @@ print(Mill.reaches,n = 4)
 ```
 
 ## Additional formatting for VAST
-There are a few more minor formatting tasks that need to be completed before we can fit a model. We need to draw information from Mill.reaches to add an "Area" column that tracks the total area in each reach, separate from the "Effort". We will also take this opportunity to convert units from feet into km. The date will also be converted into a variety of formats (statistical week, Month) that will be useful later. The objects are returned as elements of a list. 
+There are a few more minor formatting tasks that need to be completed before we can fit a model. We need to draw information from Mill.reaches to add an "Area" column that tracks the total area in each reach, separate from the "Effort". We will also take this opportunity to convert units from feet into km. The date will also be converted into a variety of formats (statistical week, Month) that will be useful later. The objects are returned as elements of a list. This function also produces a map of the spatial frame and the data coverage provided by the surveys that can be useful as a diagnostic check.  
 
 ```{r}
 Mill.list<-FormatStreamData(counts = Mill.data,reaches = Mill.reaches,surveys = Mill.surveys,unit.conv = .0003048)
@@ -57,11 +57,69 @@ We also need to produce a set of auxiliary data frames that VAST will use to det
 "Vast.network" and "vast.network.LL" are nearly identical, except for one having Lon and Lat columns. Both require columns for "child_s" which is the reach id, "parent_s" which is the id of the parent, and "dist_s" which is what we have been calling "parent.distance". Note that for the root, "parent_s" must be set to 0, and "dist_s" must be set to Inf. 
 
 ## Choosing a temporal resolution
-Depending on the system being modeled, a variety of temporal resolutions are possible. 
+Depending on the system being modeled, a variety of temporal resolutions are possible. Therefore, we will need one additional formatting step, provided by MakeVASTData. For this example, we will set the temporal resolution to one month, and will cover the 5 months from Feb. to June. We will also pad the ends of the data set with zeros, to mark the ends of the season. 
 
+```{r}
+Redd.data.vast.list<-MakeVASTData(data = Redd.data,reachdata = Reach.data,countname = "Redds_Total",Time = "Month",
+                                  startdate = "2005-02-01",enddate = "2022-06-30",padzero = T)
+Redd.data.vast<-Redd.data.vast.list[[1]]
+time.table<-Redd.data.vast.list[[2]]
+
+vast.input<-vast.input0[match(Redd.data.vast$Reach,vast.input0$child_i),]
+```
+
+This function returns a list with two elements. The first is a data frame that contains everything we will need for VAST.This data frame has three important additions. First, the temporal element has been converted into a generic "Time" period that runs in sequence. It also includes two columns "Original" and "Dummy". The Original column identifies actual data points, while the Dummy column identifies time periods or reaches for which no data is available, but that we would like the model to output a prediction. 
+
+The second element of the list is a table that is useful for relating the time period back to it's normal calendar date. The last step is that vast.input must have a number of rows equal to Redd.data.vast, so we will pull from vast.input0 to make the full version.
 
 ## An example in VAST
-From this point, we will use VAST functions to setup and run the model, and the example code here should be used as a guide. The user is advised to review the documentation for VAST, which contains extensive options for how to customize your model.
+From this point, we will use VAST functions to setup and run the model, and the example code here should be used as a guide. The user is advised to review the documentation for VAST, which contains extensive options for how to customize your model. Future versions of StreamVAST may include wrapper functions that automatically choose sensible options, but for now users can use the code in this document as a model. The first step is to make a settings object.
+
+```{r}
+settings <- make_settings(Region="stream_network",
+                          zone=10,
+                          purpose = "index2",
+                          fine_scale=F,
+                          n_x = nrow(Reach.data),
+                          FieldConfig = c("Omega1"= 1, "Epsilon1" = 1, "Omega2" = 0, "Epsilon2" = 0), 
+                          RhoConfig = c("Beta1" = 2, "Epsilon1" = 2, "Beta2" = 2, "Epsilon2" = 0),
+                          OverdispersionConfig = c("Eta1" = 0, "Eta2" = 0),
+                          ObsModel = c(7, 0),
+                          bias.correct = T,
+                          use_anisotropy = F)
+settings$Method<-"Stream_network"            
+settings$grid_size_km<-mean(Reach.data$Length)
+```
+
+It is important to specify that Region = "stream_network", and to set n_x equal tot he number of reaches. The zone is the UTM time zone, and purpose = "index2" specifies that our goal is abundance or density prediction. FieldConfig is turns various components of the model on or off (the example removes several terms for simplicity and stability), and RhoConfig specifies the type autocorrelation (random-walk in this case). We are not modeling the overdispersion, so these settings are set to zero. ObsModel controls the distributions and link functions in the model, with the current setting indicating a Poisson count model with zero inflation. Anisotropy and fine_scale should be turned off. Please see the VAST documentation for details.
+
+It is also necessary to manually set the method to "Stream_network" and to calculate a mean size for the prediction frame.
+
+For this example, we will not use any covariates, but this is the point where you would set up a covariate data set as well. See the VAST documentation for details. 
+
+### Running the Model
+```{r, message=F,results='hide'}
+vast.model<- fit_model("settings" = settings,
+                       Lat_i = Redd.data.vast$Lat,
+                       Lon_i = Redd.data.vast$Lon,
+                       t_i = as.integer(Redd.data.vast$Time),
+                       b_i = as_units(Redd.data.vast$Redds,"count"),
+                       a_i = as_units(Redd.data.vast$Effort,"km"),
+                       test_fit = FALSE,
+                       PredTF_i=Redd.data.vast$dummy,
+                       input_grid=vast.input,
+                       Network_sz=vast.network,
+                       Network_sz_LL=vast.networkLL,
+                       newtonsteps = 3,
+                       Aniso=F,
+                       getsd=T,
+                       getHessian=T,
+                       max_cells=nrow(Redd.data.vast),
+                       Options = c('treat_nonencounter_as_zero' = F))
+```
+
+
+
 
 ## Preliminary checks
 

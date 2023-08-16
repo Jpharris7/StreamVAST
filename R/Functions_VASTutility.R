@@ -10,20 +10,20 @@
 #' @param reaches A sf lines object, presumably from other StreamVAST functions, or a filename
 #' @param surveys An optional set of surveys, presumably from MakeSurveyTracks, or a filename
 #' @param unit.conv A conversion used for distance units, can set to 1
+#' @param makeplot Should the function make the data-overlap map
 #'
 #' @return A list with several elements necessary for VAST
 #' @export
 #'
 #' @examples
-FormatStreamData<-function(counts,reaches,surveys,unit.conv=.0003048){
+FormatStreamData<-function(counts,reaches,surveys=NA,unit.conv=.0003048,makeplot=T){
 
   # read in the data, either directly or from a file
   countdata<-counts
   if(class(counts)[1]=="character"){countdata<-utils::read.csv(counts)}
   reachdata<-reaches
   if(class(reaches)[1]=="character"){reachdata<-sf::st_read(reaches)}
-  surveydata<-surveys
-  if(class(surveys)[1]=="character"){surveydata<-sf::st_read(surveys)}
+
 
   # Calculate some values that aren't in the data already
   reachdata$Length<-as.numeric(sf::st_length(reachdata))*unit.conv  # convert feet to km
@@ -41,7 +41,6 @@ FormatStreamData<-function(counts,reaches,surveys,unit.conv=.0003048){
 
   # account for different capitalizations of day
   names(countdata)[names(countdata)%in%c("Day","day")]<-"Day"
-  names(surveydata)[names(surveydata)%in%c("Day","day")]<-"Day"
 
   data.dates<-as.Date(paste(countdata$Year,countdata$Day,sep="_"),format="%Y_%j")
   countdata$Month<-format(data.dates,format="%b")
@@ -85,18 +84,29 @@ FormatStreamData<-function(counts,reaches,surveys,unit.conv=.0003048){
   vastnetworkLL$dist_s[vastnetworkLL$parent_s==0]<-Inf
   vastnetwork<-vastnetworkLL[,3:5]
 
+  if(class(surveys)[1]=="character"){surveydata<-sf::st_read(surveys)}
+  if(class(surveys)[1]%in%c("sf","data.frame")){surveydata<-surveys}
+  if(is.na(surveys)[1]){surveydata<-NA}
+  if(any(class(surveydata)%in%c("sf","data.frame"))){names(surveydata)[names(surveydata)%in%c("Day","day")]<-"Day"}
+
   # diagnostics, make sure the data is valid
-  plot1<-ggplot2::ggplot()+
-    ggplot2::geom_point(data=countdata,ggplot2::aes(x=Day,y=Year),size=3,col=1)+
-    ggplot2::geom_point(data=surveydata,ggplot2::aes(x=Day,y=Year),size=1,col=2)+ggplot2::theme_bw()
-  print(plot1)
+  if(makeplot){
+    overlapplot<-ggplot2::ggplot()+
+      ggplot2::geom_sf(data=reachdata$geometry,lwd=4,ggplot2::aes(color="1"))
+    if(class(surveydata)[1]=="sf"){
+      overlapplot<-overlapplot+ggplot2::geom_sf(data=surveydata$geometry,lwd=2,ggplot2::aes(col="2"))
+      bluecol<-"royalblue"
+    }else{
+      bluecol<-"turquoise2"
+    }
+    overlapplot<-overlapplot+
+      ggplot2::geom_sf(data=reachdata$geometry[reachdata$reachid%in%countdata$Reach],lwd=1,ggplot2::aes(col="4"))+
+      ggplot2::theme_bw()+scale_color_manual(values = c("1"="black","2"="tomato","4"=bluecol),
+                                             labels=c("Spatial Frame","Survey Coverage","Data Coverage"))+
+      ggplot2::theme(legend.title = ggplot2::element_blank())
 
-  plot3<-ggplot2::ggplot()+
-    ggplot2::geom_sf(data=reachdata$geometry,lwd=4)+
-    ggplot2::geom_sf(data=surveydata$geometry,lwd=2,col=2)+
-    ggplot2::geom_sf(data=reachdata$geometry[reachdata$reachid%in%countdata$Reach],lwd=1,col=4)+ggplot2::theme_bw()
-  print(plot3)
-
+    print(overlapplot)
+  }
   return(list(countdata,reachdata,surveydata,vastinput,vastnetwork,vastnetworkLL))
 }
 
@@ -140,7 +150,7 @@ VASTpreds<-function(model,time="Time",space="Reach",time.table=NA,sim.data){
   # simulate the data for CIs
   if(missing(sim.data)){
     sim.data<-FishStatsUtils::sample_variable(Sdreport=model$parameter_estimates$SD,Obj=model$tmb_list$Obj,
-                              variable_name="D_gct",n_samples = 100)
+                                              variable_name="D_gct",n_samples = 100)
   }
   # quick loop to grab the values
   for(i in 1:report.dims[3]){
@@ -176,7 +186,7 @@ VASTpreds<-function(model,time="Time",space="Reach",time.table=NA,sim.data){
 VASTeval<-function(model,data,effort="Effort",time.table=NA){
 
   sim.data<-FishStatsUtils::sample_variable(Sdreport=model$parameter_estimates$SD,Obj=model$tmb_list$Obj,
-                            variable_name="D_i",n_samples = 100)
+                                            variable_name="D_i",n_samples = 100)
 
   out.data<-data.frame(data,
                        pDensity=model$Report$D_i/data[,effort],
@@ -196,7 +206,7 @@ VASTeval<-function(model,data,effort="Effort",time.table=NA){
 #' @param data a data frame with time, space, effort, and observations
 #' @param reachdata A sf object, presumably from LoadStreamData
 #' @param unit.conv a unit conversion for distances
-#' @param reddname the name in data that corresponds to the Redd count
+#' @param countname the name in data that corresponds to the Redd count
 #' @param startdate dates to truncate or expand the data in yyyy-mm-dd format
 #' @param enddate dates to truncate or expand the data in yyyy-mm-dd format
 #' @param padzero should survey with zero observations be added at start/end dates
@@ -206,7 +216,7 @@ VASTeval<-function(model,data,effort="Effort",time.table=NA){
 #' @export
 #'
 #' @examples
-MakeVASTData<-function(data, reachdata,unit.conv=1, reddname="Redds",
+MakeVASTData<-function(data, reachdata,unit.conv=1, countname="Redds",
                        startdate=NA,enddate=NA,padzero=T, Time="Year"){
 
   if(Time=="Year"){timeformat<-"%Y"}
@@ -273,7 +283,7 @@ MakeVASTData<-function(data, reachdata,unit.conv=1, reddname="Redds",
 
     data$Key<-paste(data$Year,ceiling(as.integer(format(data.dates,format=strsplit(timeformat,split="-")[[1]][2]))/tdivide),sep="-")
   }
-
+  time.table$Day<-as.integer(format(time.table$Refdate,format="%j"))
 
   # Set up some reach info
   midpoints<-as.data.frame(sf::st_coordinates(sf::st_transform(sf::st_line_sample(x=reachdata,sample = .5),crs = "wgs84")))[,1:2]
@@ -285,8 +295,8 @@ MakeVASTData<-function(data, reachdata,unit.conv=1, reddname="Redds",
                        Day=data$Day,
                        Month=data$Month,
                        Reach=data$Reach,
-                       Redds=data[,reddname],
-                       Density=data[,reddname]/data$Effort,
+                       Redds=data[,countname],
+                       Density=data[,countname]/data$Effort,
                        Area=data$Area,
                        Effort=data$Effort,
                        Lat=midpoints[match(x=data$Reach,midpoints$Reach),2],
@@ -389,6 +399,12 @@ MakeVASTData<-function(data, reachdata,unit.conv=1, reddname="Redds",
   max.month<-max(which(month.abb%in%out.data$Month))
   out.data$Month<-factor(out.data$Month,levels = month.abb[min.month:max.month])
 
+  # add a bit to determine which time frames are original
+  x<-aggregate(out.data$original[out.data$dummy==F],
+               by=list(Time=out.data$Time[out.data$dummy==F]),FUN=max)
+  time.table$Original<-F
+  time.table$Original[time.table$Time%in%x$Time[which(x$x==1)]]<-T
+
   return(list(out.data,time.table))
 }
 
@@ -464,7 +480,7 @@ plotPredictionMap<-function(data, mapvar="preds", reaches,facet=NA,reach.names="
   for(i in 1:nrow(reachplot)){
     if(length(facet.vec)>1){
       reachplot$preds[i]<-datareach$x[datareach$Reach==reachplot$reach[i] &
-                                       datareach[,facet.name]==reachplot$group[i]]
+                                        datareach[,facet.name]==reachplot$group[i]]
     }else{
       reachplot$preds[i]<-datareach$x[datareach$Reach==reachplot$reach[i]]
     }
@@ -563,7 +579,7 @@ VASTtotals<-function(model,eval){
   names(out.data)[2]<-"Redds"
 
   sim.data<-FishStatsUtils::sample_variable(Sdreport=model$parameter_estimates$SD,Obj=model$tmb_list$Obj,
-                            variable_name="Index_ctl",n_samples = 100)
+                                            variable_name="Index_ctl",n_samples = 100)
 
   out.data$pRedds<-as.numeric(model$Report$Index_ctl[1,out.data$Time,1])
   out.data$pRedds_lower<-apply(sim.data[1,out.data$Time,1,],MARGIN = 1,FUN=stats::quantile,probs = .05)
