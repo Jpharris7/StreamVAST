@@ -145,7 +145,7 @@ VASTpreds<-function(model,time="Time",space="Reach",time.table=NA,sim.data){
     if(time!="Day"){out.data$Day<-as.integer(format(time.table$Refdate[match.vec],format="%j"))}
   }
 
-  out.data<-cbind(out.data,data.frame(preds=rep(NA,nrow(out.data)),lower=rep(NA,nrow(out.data)),
+  out.data<-cbind(out.data,data.frame(density=rep(NA,nrow(out.data)),lower=rep(NA,nrow(out.data)),
                                       upper=rep(NA,nrow(out.data))))
   # simulate the data for CIs
   if(missing(sim.data)){
@@ -155,7 +155,7 @@ VASTpreds<-function(model,time="Time",space="Reach",time.table=NA,sim.data){
   # quick loop to grab the values
   for(i in 1:report.dims[3]){
     spots<-(1+(i-1)*report.dims[1]):(i*report.dims[1])
-    out.data$preds[spots]<-model$Report$D_gct[,1,i]
+    out.data$density[spots]<-model$Report$D_gct[,1,i]
     out.data$lower[spots]<-apply(sim.data[,1,i,],MARGIN = 1,FUN = stats::quantile,probs=.05)
     out.data$upper[spots]<-apply(sim.data[,1,i,],MARGIN = 1,FUN = stats::quantile,probs=.95)
   }
@@ -164,9 +164,9 @@ VASTpreds<-function(model,time="Time",space="Reach",time.table=NA,sim.data){
   input.grid<-unique(model$input_args$extra_args$input_grid)
 
   out.data$Length<-input.grid$Area_km2[match(out.data$Reach,input.grid$child_i)]
-  out.data$Redds<-out.data$preds*out.data$Length
-  out.data$lowerRedds<-out.data$lower*out.data$Length
-  out.data$upperRedds<-out.data$upper*out.data$Length
+  out.data$count<-out.data$density*out.data$Length
+  out.data$lowercount<-out.data$lower*out.data$Length
+  out.data$uppercount<-out.data$upper*out.data$Length
 
   return(out.data)
 }
@@ -196,7 +196,7 @@ VASTeval<-function(model,data,effort="Effort",time.table=NA){
   out.data$pRedds_lower<-apply(sim.data,MARGIN = 1,FUN=stats::quantile,probs=.05)
   out.data$pRedds_upper<-apply(sim.data,MARGIN = 1,FUN=stats::quantile,probs=.95)
 
-  return(out.data)
+  return(subset(out.data,dummy==F))
 }
 
 

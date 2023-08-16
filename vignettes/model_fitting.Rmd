@@ -15,6 +15,7 @@ knitr::opts_chunk$set(
 
 ```{r setup, warning=FALSE}
 library(StreamVAST)
+library(VAST)
 library(sf)
 library(ggplot2)
 library(sfnetworks)
@@ -60,7 +61,7 @@ We also need to produce a set of auxiliary data frames that VAST will use to det
 Depending on the system being modeled, a variety of temporal resolutions are possible. Therefore, we will need one additional formatting step, provided by MakeVASTData. For this example, we will set the temporal resolution to one month, and will cover the 5 months from Feb. to June. We will also pad the ends of the data set with zeros, to mark the ends of the season. 
 
 ```{r}
-Redd.data.vast.list<-MakeVASTData(data = Redd.data,reachdata = Reach.data,countname = "Redds_Total",Time = "Month",
+Redd.data.vast.list<-MakeVASTData(data = Redd.data,reachdata = Reach.data,countname = "Redds",Time = "Month",
                                   startdate = "2005-02-01",enddate = "2022-06-30",padzero = T)
 Redd.data.vast<-Redd.data.vast.list[[1]]
 time.table<-Redd.data.vast.list[[2]]
@@ -81,7 +82,7 @@ settings <- make_settings(Region="stream_network",
                           purpose = "index2",
                           fine_scale=F,
                           n_x = nrow(Reach.data),
-                          FieldConfig = c("Omega1"= 1, "Epsilon1" = 1, "Omega2" = 0, "Epsilon2" = 0), 
+                          FieldConfig = c("Omega1"= 1, "Epsilon1" = 1, "Omega2" = 1, "Epsilon2" = 0), 
                           RhoConfig = c("Beta1" = 2, "Epsilon1" = 2, "Beta2" = 2, "Epsilon2" = 0),
                           OverdispersionConfig = c("Eta1" = 0, "Eta2" = 0),
                           ObsModel = c(7, 0),
@@ -97,7 +98,8 @@ It is also necessary to manually set the method to "Stream_network" and to calcu
 
 For this example, we will not use any covariates, but this is the point where you would set up a covariate data set as well. See the VAST documentation for details. 
 
-### Running the Model
+Next, we can run the model, using "fit_model" from the VAST package. While there are many inputs, the preceding steps have made everything available. Note that some of the values should be converted to units for the function. Also, VAST will write a number of text files to you active working directory.
+
 ```{r, message=F,results='hide'}
 vast.model<- fit_model("settings" = settings,
                        Lat_i = Redd.data.vast$Lat,
@@ -118,16 +120,46 @@ vast.model<- fit_model("settings" = settings,
                        Options = c('treat_nonencounter_as_zero' = F))
 ```
 
+## Preliminary checks and Troubleshooting
+The object "vast.model" contains many pieces, several of which are useful to determine if the algorithm has run successfully. A basic check of the parameter estimates is often advisable. 
+
+```{r}
+vast.model$parameter_estimates$Convergence_check
+```
+```{r}
+vast.model$parameter_estimates$par
+```
+```{r}
+vast.model$parameter_estimates$number_of_coefficients
+
+```
+
+If your model is not converging, experiment with by making the settings. It is often productive to begin with a simple model (by inputting 0s in FieldConfig or RhoConfig) and then to gradually increase the complexity. Refer to the VAST documentation for specifics.
+
+The predictions from the fitted VAST model can be quickly extracted using a helper function VASTpreds. This function will format the predictions into a data frame, and provide the density and count estimates for each reach at each time period. It also provides upper and lower  90% confidence bounds, based on samples drawn from the posterior distribution. A second functon can produce maps from the output.
+
+```{r, message=F}
+preds<-VASTpreds(model = vast.model,time.table=time.table)
+plotPredictionMap(data = preds,mapvar = "density",reaches = Reach.data,
+                  reach.names = "reachid",make.labels = F)
+
+```
+
+These maps can also be faceted by year, month, etc.
+
+```{r}
+plotPredictionMap(data = preds,mapvar = "density",reaches = Reach.data,
+                  facet = "Month",reach.names = "reachid",make.labels = F,xaxis.breaks = c(-123.24,-123.20))
+```
+
+Vast is also compatible with the DHARMa package, which provides scaled residual estimates for hierarchical models, and is a good first step to assessing model fit. Note that due to compatibility issues, you must have a copy of the vast.model object named "fit".
+
+```{r,message=F}
+library(DHARMa)
+fit<-vast.model
+dharmaRes = summary(vast.model, what="residuals", type=1)
+par(mfrow=c(1,1))
+```
 
 
-
-## Preliminary checks
-
-
-
-
-
-In the final chapter, StreamVAST provides some functions that allow users to conveniently extract predictions or residuals from the VAST model, and demonstrates some plotting functions that may be useful to evaluate or present the results of a model. 
-
-
-
+In the final chapter, StreamVAST provides some functions that allow users to conveniently extract predictions or residuals from the VAST model, further explore model fit, generate some derived population metrics, and demonstrates some plotting functions that may be useful to evaluate or present the results of a model. 
