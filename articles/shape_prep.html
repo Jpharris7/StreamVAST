@@ -41,6 +41,7 @@
 <li class="active nav-item dropdown">
   <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown" role="button" aria-expanded="false" aria-haspopup="true" id="dropdown-articles">Articles</a>
   <div class="dropdown-menu" aria-labelledby="dropdown-articles">
+    <a class="dropdown-item" href="../articles/model_fitting.html">Fitting a VAST Model</a>
     <a class="dropdown-item" href="../articles/shape_prep.html">Preparing a Stream Network</a>
   </div>
 </li>
@@ -71,7 +72,7 @@
     
     
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va">StreamVAST</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://jpharris7.github.io/StreamVAST/" class="external-link">StreamVAST</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://r-spatial.github.io/sf/" class="external-link">sf</a></span><span class="op">)</span></span>
 <span><span class="co">#&gt; Linking to GEOS 3.9.1, GDAL 3.4.3, PROJ 7.2.1; sf_use_s2() is TRUE</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://ggplot2.tidyverse.org" class="external-link">ggplot2</a></span><span class="op">)</span></span>
@@ -257,20 +258,20 @@ may take several hours.</p>
 <span><span class="va">Mill.data</span><span class="op">&lt;-</span><span class="fu"><a href="../reference/AssembleReddData.html">AssembleReddData</a></span><span class="op">(</span>shape <span class="op">=</span> <span class="va">Mill.reaches3</span>,georedds <span class="op">=</span> <span class="va">Mill.redds</span>,georedds.coords <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"lon"</span>,<span class="st">"lat"</span><span class="op">)</span>,reddcrs <span class="op">=</span> <span class="fl">2286</span>,surveys <span class="op">=</span> <span class="va">Mill.surveys</span><span class="op">)</span></span></code></pre></div>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">Mill.data</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   Year Day Reach                    Effort Redds  STRM_NAME  root parent</span></span>
-<span><span class="co">#&gt; 1 2013  64     1 2465.601 [US_survey_foot]     0 Mill Creek  TRUE     NA</span></span>
-<span><span class="co">#&gt; 2 2013  64     2 3499.699 [US_survey_foot]     0 Mill Creek FALSE      1</span></span>
-<span><span class="co">#&gt; 3 2013  64     3 3354.350 [US_survey_foot]     0 Mill Creek FALSE      2</span></span>
-<span><span class="co">#&gt; 4 2013  64     4 3354.350 [US_survey_foot]     0 Mill Creek FALSE      3</span></span>
-<span><span class="co">#&gt; 5 2013  78     1 2465.601 [US_survey_foot]     0 Mill Creek  TRUE     NA</span></span>
-<span><span class="co">#&gt; 6 2013  78     2 3499.699 [US_survey_foot]     0 Mill Creek FALSE      1</span></span>
-<span><span class="co">#&gt;             parent.distance</span></span>
-<span><span class="co">#&gt; 1       NA [US_survey_foot]</span></span>
-<span><span class="co">#&gt; 2 3499.699 [US_survey_foot]</span></span>
-<span><span class="co">#&gt; 3 3427.024 [US_survey_foot]</span></span>
-<span><span class="co">#&gt; 4 3354.350 [US_survey_foot]</span></span>
-<span><span class="co">#&gt; 5       NA [US_survey_foot]</span></span>
-<span><span class="co">#&gt; 6 3499.699 [US_survey_foot]</span></span></code></pre></div>
+<span><span class="co">#&gt;   Year Day Reach                    Effort Redds habitat  STRM_NAME  root</span></span>
+<span><span class="co">#&gt; 1 2013  64     1 2465.601 [US_survey_foot]     0    TRUE Mill Creek  TRUE</span></span>
+<span><span class="co">#&gt; 2 2013  64     2 3499.699 [US_survey_foot]     0    TRUE Mill Creek FALSE</span></span>
+<span><span class="co">#&gt; 3 2013  64     3 3354.350 [US_survey_foot]     0    TRUE Mill Creek FALSE</span></span>
+<span><span class="co">#&gt; 4 2013  64     4 3354.350 [US_survey_foot]     0    TRUE Mill Creek FALSE</span></span>
+<span><span class="co">#&gt; 5 2013  78     1 2465.601 [US_survey_foot]     0    TRUE Mill Creek  TRUE</span></span>
+<span><span class="co">#&gt; 6 2013  78     2 3499.699 [US_survey_foot]     0    TRUE Mill Creek FALSE</span></span>
+<span><span class="co">#&gt;   parent parent.distance</span></span>
+<span><span class="co">#&gt; 1     NA              NA</span></span>
+<span><span class="co">#&gt; 2      1        3499.699</span></span>
+<span><span class="co">#&gt; 3      2        3427.024</span></span>
+<span><span class="co">#&gt; 4      3        3354.350</span></span>
+<span><span class="co">#&gt; 5     NA              NA</span></span>
+<span><span class="co">#&gt; 6      1        3499.699</span></span></code></pre></div>
 <p>In the next chapter, We will explore some additional options for
 formatting the data for use in VAST, and how to ensure that the
 necessary accessory objects and dataframes are ready for VAST package
