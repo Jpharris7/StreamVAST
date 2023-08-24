@@ -58,7 +58,7 @@ We also need to produce a set of auxiliary data frames that VAST will use to det
 "Vast.network" and "vast.network.LL" are nearly identical, except for one having Lon and Lat columns. Both require columns for "child_s" which is the reach id, "parent_s" which is the id of the parent, and "dist_s" which is what we have been calling "parent.distance". Note that for the root, "parent_s" must be set to 0, and "dist_s" must be set to Inf. 
 
 ## Choosing a temporal resolution
-Depending on the system being modeled, a variety of temporal resolutions are possible. Therefore, we will need one additional formatting step, provided by MakeVASTData. For this example, we will set the temporal resolution to one month, and will cover the 5 months from Feb. to June. We will also pad the ends of the data set with zeros, to mark the ends of the season. 
+Depending on the system being modeled, a variety of temporal resolutions are possible. Therefore, we will need one additional formatting step, provided by MakeVASTData. For this example, we will set the temporal resolution to two weeks, and will cover the 5 months from Feb. to June. We will also pad the ends of the data set with zeros, to mark the ends of the season. 
 
 ```{r}
 Redd.data.vast.list<-MakeVASTData(data = Redd.data,reachdata = Reach.data,countname = "Redds",Time = "Biweek",
