@@ -30,6 +30,7 @@ FormatStreamData<-function(counts,reaches,surveys=NA,unit.conv=.0003048,makeplot
   countdata$Area<-reachdata$Length[match(countdata$Reach,reachdata$reachid)]
   countdata$Effort<-countdata$Effort*unit.conv
   countdata$prnt_ds<-as.numeric(countdata$parent.distance*unit.conv)
+  reachdata$prnt_ds<-as.numeric(reachdata$prnt_ds*unit.conv)
 
   # This needs to be made more general
   if(all(c("Redds_NR","Redds_SV")%in%names(countdata))){
@@ -62,7 +63,7 @@ FormatStreamData<-function(counts,reaches,surveys=NA,unit.conv=.0003048,makeplot
     up.next<-min(reachdata$reachid[reachdata$reachid%in%needs.doing & reachdata$parent%in%already.done])
     index<-which(reachdata$reachid==up.next)
     parent.index<-which(reachdata$reachid==reachdata$parent[index])
-    reachdata$streamdist[index]<-reachdata$streamdist[parent.index]+reachdata$prnt_ds[parent.index]
+    reachdata$streamdist[index]<-reachdata$streamdist[parent.index]+reachdata$prnt_ds[index]
 
     needs.doing<-needs.doing[needs.doing!=up.next]
     already.done<-c(already.done,up.next)
