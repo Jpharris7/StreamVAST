@@ -1,44 +1,80 @@
 # This script will hold several utility functions designed to help analyze the output of VAST models
 
-#let's make a function wrapper for all the preliminary setup
-# outputs a list with the necessay components, and a diagnostic plots
-#' Final formatting of Stream data for VAST
+#' ConstructStreamVAST
+#' This function constructs objects with class "StreamVAST". Depending on the arguments supplied, it will either
+#' initialize the object from countdata and reachdata, or it will add details to an already defined StreamVAST object.
 #'
-#' Provides some final formatting and convenience steps before using VAST
+#' @param StreamVAST An StreamVAST object to append details
+#' @param countdata A dataframe containing count data, such as outputed from AssembleReddData
+#' @param reachdata A sf object with data for reaches, such as from AssignReaches
+#' @param surveydata A optional data frame or sf object with survey information, such as from MakeSurveyTracks, doesn't do much right now
+#' @param vastinput A dataframe with spatial information for VAST, requires a specific format
+#' @param vastnetwork A dataframe with spatial information for VAST's stream functionality
+#' @param vastnetworkLL A dataframe with spatial information needed for VAST's stream functionality
+#' @param vastdata A dataframe formatted specifically for use with VAST
+#' @param vastsettings a list of settings used to run a vast model
+#' @param vastmodel A fitted VAST model
+#' @param countname A column name from countdata to use
+#' @param reachname a column name from reachdata to use
+#' @param timetable a dataframe converting timesteps to dates
+#' @param timescale The temporal resolution
+#' @param timerange A length two vector with the start and enddate for the temporal
+#' @param title A title or name for the stream system, use for plotting
+#' @param stats A list with summary stats, like RMSE,AIC
+#' @param preds A dataframe of all predictions from the VAST model
+#' @param eval A limited dataframe for evaluating model performance
+#' @param spacedata A dataframe with results aggregated by spatial frame
+#' @param timedata A dataframe with results aggregated by time frame
+#' @param aucdata a dataframe with Area under the Curve calculations derived from model
+#' @param covariates a list with elements for the covariates
 #'
-#' @param counts A data frame with count data, presumably from AssembleReddData, or a filename
-#' @param reaches A sf lines object, presumably from other StreamVAST functions, or a filename
-#' @param surveys An optional set of surveys, presumably from MakeSurveyTracks, or a filename
-#' @param unit.conv A conversion used for distance units, can set to 1
-#' @param makeplot Should the function make the data-overlap map
-#'
-#' @return A list with several elements necessary for VAST
+#' @return
 #' @export
 #'
 #' @examples
-FormatStreamData<-function(counts,reaches,surveys=NA,unit.conv=.0003048,makeplot=T){
+ConstructStreamVAST<-function(countdata,reachdata,surveydata,vastdata,vastmodel,countname,reachname,timetable,timescale,timerange,
+                              title,stats,preds,eval,spacedata,timedata,aucdata,unitconv,covariates){
 
-  # read in the data, either directly or from a file
-  countdata<-counts
-  if(class(counts)[1]=="character"){countdata<-utils::read.csv(counts)}
-  reachdata<-reaches
-  if(class(reaches)[1]=="character"){reachdata<-sf::st_read(reaches)}
+  # if the StreamVAST object is missing, we will construct it from countdata and reachdata
+  if(missing(countdata) | missing(reachdata)){
+    stop("Arguments 'countdata' and 'reachdata' are required to initialize StreamVAST")
+  }
+  print("Initializing StreamVAST based on countdata and reachdata")
+  if(class(countdata)[1]=="character"){countdata<-utils::read.csv(countdata)}
+  if(class(reachdata)[1]=="character"){reachdata<-sf::st_read(reachdata)}
+  if(class(reachdata)[1]!="sf"){stop("Argument reachdata must be a sf object with LINESTRING geometries")}
+  if(missing(surveydata)){surveydata<-NA}
 
+  if(missing(unitconv)){
+    x1<-sf::st_length(reachdata)[1]
+    x2<-x1
+    units(x2)<-units::make_units(km)
+    unitconv<-as.numeric(x2)/as.numeric(x1)
+    if(abs(unitconv-1)>.1){print("Converting length units to kilometers (Default)")}
+  }
+
+  c.names<-names(countdata)
+  r.names<-names(reachdata)
+
+  # will try to identify a name for countname and reachname, if absent
+  if(missing(countname)){
+    namepicker<-which(c("count","redds","redd","fish","abundance","abund")%in%tolower(c.names))
+    if(length(namepicker)==0){stop("Could not identify a column for counts. Please specify 'countname' and try again.")}
+    countname<-c.names[tolower(c.names)==c("count","redds","redd","fish","abundance","abund")[namepicker[1]]]
+  }
+  if(missing(reachname)){
+    namepicker<-which(c("reach","reachid","reach_id","reach_no","streamid","stream_id","stream_no")%in%tolower(r.names))
+    if(length(namepicker)==0){stop("Could not identify a column for reach. Please specify 'reachname' and try again.")}
+    reachname<-r.names[tolower(r.names)==c("reach","reachid","reach_id","reach_no","streamid","stream_id","stream_no")[namepicker[1]]]
+  }
 
   # Calculate some values that aren't in the data already
-  reachdata$Length<-as.numeric(sf::st_length(reachdata))*unit.conv  # convert feet to km
-  countdata$Area<-reachdata$Length[match(countdata$Reach,reachdata$reachid)]
-  countdata$Effort<-countdata$Effort*unit.conv
-  countdata$prnt_ds<-as.numeric(countdata$parent.distance*unit.conv)
-  reachdata$prnt_ds<-as.numeric(reachdata$prnt_ds*unit.conv)
-
-  # This needs to be made more general
-  if(all(c("Redds_NR","Redds_SV")%in%names(countdata))){
-    countdata$Redds_Total<-countdata$Redds_NR+countdata$Redds_SV
-    countdata$Density_Total<-countdata$Redds_Total/countdata$Effort
-  }else{
-    countdata$Density_Total<-countdata$Redds/countdata$Effort
-  }
+  reachdata$Length<-as.numeric(sf::st_length(reachdata))*unitconv  # convert feet to km
+  countdata$Area<-reachdata$Length[countdata[,reachname]]
+  countdata$Effort<-countdata$Effort*unitconv
+  countdata$prnt_ds<-as.numeric(countdata$parent.distance*unitconv)
+  reachdata$prnt_ds<-as.numeric(reachdata$prnt_ds*unitconv)
+  countdata$Density<-countdata[,countname]/countdata$Effort
 
   # account for different capitalizations of day
   names(countdata)[names(countdata)%in%c("Day","day")]<-"Day"
@@ -47,167 +83,118 @@ FormatStreamData<-function(counts,reaches,surveys=NA,unit.conv=.0003048,makeplot
   countdata$Month<-format(data.dates,format="%b")
   countdata$Week<-ceiling(countdata$Day/7)
 
-  # Next set up the spatial inputs. These are consistent and do not change unless you load a new data set
-  # we designate the prediction and sampling knots as being at the midpoint of each reach
-  midpoints<-as.data.frame(sf::st_coordinates(sf::st_line_sample(x=reachdata,sample = .5)))
-  midpoints<-as.data.frame(sf::st_coordinates(sf::st_transform(sf::st_line_sample(x=reachdata,sample = .5),
-                                                               crs = "wgs84")))[,1:2]
-  midpoints$Reach<-reachdata$reachid
-
-  # add stream distance to reachdata
+  # add stream distance to reachdata and add vastids that will account for non-habitat areas
   reachdata$streamdist<-NA
+  reachdata$vastid<-NA
+  reachdata$vastparent<-NA
   reachdata$streamdist[is.na(reachdata$parent)]<-reachdata$Length[is.na(reachdata$parent)]/2
-  needs.doing<-reachdata$reachid[is.na(reachdata$streamdist)]
-  already.done<-reachdata$reachid[is.na(reachdata$streamdist)==F]
-  while(length(needs.doing>0)){
-    up.next<-min(reachdata$reachid[reachdata$reachid%in%needs.doing & reachdata$parent%in%already.done])
-    index<-which(reachdata$reachid==up.next)
-    parent.index<-which(reachdata$reachid==reachdata$parent[index])
+  reachdata$vastid[is.na(reachdata$parent)]<-1
+
+
+  needs.doing<-as.data.frame(reachdata)[is.na(reachdata$streamdist),reachname]
+  already.done<-as.data.frame(reachdata)[is.na(reachdata$streamdist)==F,reachname]
+  while(length(needs.doing)>0){
+    up.next<-min(as.data.frame(reachdata)[as.data.frame(reachdata)[,reachname]%in%needs.doing & reachdata$parent%in%already.done,reachname])
+    index<-which(as.data.frame(reachdata)[,reachname]==up.next)
+    parent.index<-which(as.data.frame(reachdata)[,reachname]==reachdata$parent[index])
     reachdata$streamdist[index]<-reachdata$streamdist[parent.index]+reachdata$prnt_ds[index]
+
+    if(reachdata$habitat[index]==T){
+      reachdata$vastid[index]<-max(reachdata$vastid,na.rm=T)+1
+      reachdata$vastparent[index]<-reachdata$vastid[parent.index]
+    }
 
     needs.doing<-needs.doing[needs.doing!=up.next]
     already.done<-c(already.done,up.next)
   }
 
+  habitat.reaches<-reachdata[reachdata$habitat==T,]
+  countdata$vastid<-reachdata$vastid[match(countdata$Reach,reachdata$Reach)]
+  countdata$Vastparent<-reachdata$vastparent[match(countdata$Reach,reachdata$Reach)]
+
+  # Next set up the spatial inputs. These are consistent and do not change unless you load a new data set
+  # we designate the prediction and sampling knots as being at the midpoint of each reach
+  midpoints<-as.data.frame(sf::st_coordinates(sf::st_transform(sf::st_line_sample(x=habitat.reaches,sample = .5),
+                                                               crs = "wgs84")))[,1:2]
+  midpoints$ID<-habitat.reaches$vastid
+
   # important format stuff
   # child is the same as reach id
   # parent is the reach downstream of the child
   # The root has parent = 0 and dist = Inf
-
-  vastinput<-midpoints[order(midpoints$Reach),]
+  vastinput<-midpoints[order(midpoints$ID),]
   names(vastinput)<-c("Lon","Lat","child_i")
-  vastinput$Area_km2=reachdata$Length[match(vastinput$child_i,reachdata$reachid)]
+  vastinput$Area_km2<-habitat.reaches$Length[match(vastinput$child_i,habitat.reaches$vastid)]
   vastnetworkLL<-vastinput[,1:2]
   vastnetworkLL$child_s<-vastinput$child_i
-  vastnetworkLL$parent_s<-reachdata$parent[match(vastnetworkLL$child_s,reachdata$reachid)]
-  vastnetworkLL$dist_s<-reachdata$prnt_ds[match(vastinput$child_i,reachdata$reachid)]*unit.conv
+  vastnetworkLL$parent_s<-habitat.reaches$vastparent[match(vastnetworkLL$child_s,habitat.reaches$vastid)]
+  vastnetworkLL$dist_s<-habitat.reaches$prnt_ds[match(vastinput$child_i,habitat.reaches$vastid)]
   vastnetworkLL$parent_s[is.na(vastnetworkLL$parent_s)]<-0
   vastnetworkLL$dist_s[vastnetworkLL$parent_s==0]<-Inf
   vastnetwork<-vastnetworkLL[,3:5]
 
-  if(class(surveys)[1]=="character"){surveydata<-sf::st_read(surveys)}
-  if(class(surveys)[1]%in%c("sf","data.frame")){surveydata<-surveys}
-  if(is.na(surveys)[1]){surveydata<-NA}
+  if(missing(surveydata)){surveydata<-NA}
+  if(class(surveydata)[1]=="character"){surveydata<-sf::st_read(surveydata)}
   if(any(class(surveydata)%in%c("sf","data.frame"))){names(surveydata)[names(surveydata)%in%c("Day","day")]<-"Day"}
+  if(any(countdata$habitat==F)){
+    warning(paste("Removed ",sum(countdata$habitat==F)," count records in non-habitat areas"))
+    print("Summary of excluded records")
+    print(head(subset(countdata,habitat==F)))
+  }
+  countdata<-subset(countdata,habitat==T)
 
   # diagnostics, make sure the data is valid
-  if(makeplot){
-    overlapplot<-ggplot2::ggplot()+
-      ggplot2::geom_sf(data=reachdata$geometry,lwd=4,ggplot2::aes(color="1"))
-    if(class(surveydata)[1]=="sf"){
-      overlapplot<-overlapplot+ggplot2::geom_sf(data=surveydata$geometry,lwd=2,ggplot2::aes(col="2"))
-      bluecol<-"royalblue"
-    }else{
-      bluecol<-"turquoise2"
-    }
+  overlapplot<-ggplot2::ggplot()+
+    ggplot2::geom_sf(data=reachdata$geometry,lwd=5,ggplot2::aes(color="1"))
+  if(any(reachdata$habitat==F)){
     overlapplot<-overlapplot+
-      ggplot2::geom_sf(data=reachdata$geometry[reachdata$reachid%in%countdata$Reach],lwd=1,ggplot2::aes(col="4"))+
-      ggplot2::theme_bw()+scale_color_manual(values = c("1"="black","2"="tomato","4"=bluecol),
-                                             labels=c("Spatial Frame","Survey Coverage","Data Coverage"))+
-      ggplot2::theme(legend.title = ggplot2::element_blank())
-
-    print(overlapplot)
+      ggplot2::geom_sf(data=reachdata[reachdata$habitat==F,],lwd=4,ggplot2::aes(col="2"))
+    legend.labels<-c("Spatial Frame","Nonhabitat","Survey Coverage","Data Coverage")
+  }else{
+    legend.labels<-c("Spatial Frame","Survey Coverage","Data Coverage")
   }
-  return(list(countdata,reachdata,surveydata,vastinput,vastnetwork,vastnetworkLL))
+  if(class(surveydata)[1]=="sf"){
+    overlapplot<-overlapplot+ggplot2::geom_sf(data=surveydata$geometry,lwd=2,ggplot2::aes(col="3"))
+    bluecol<-"royalblue"
+  }else{
+    bluecol<-"turquoise2"
+  }
+  overlapplot<-overlapplot+
+    ggplot2::geom_sf(data=reachdata$geometry[as.data.frame(reachdata)[,reachname]%in%countdata$Reach],lwd=1,ggplot2::aes(col="4"))+
+    ggplot2::theme_bw()+ggplot2::scale_color_manual(values = c("1"="black","2"="gray60","3"="tomato","4"=bluecol),
+                                                    labels=legend.labels)+
+    ggplot2::theme(legend.title = ggplot2::element_blank())
+  print(overlapplot)
+
+  if(missing(title)){title<-NULL}
+  if(missing(vastdata)){vastdata<-NULL}
+  if(missing(timetable)){timetable<-NULL}
+  if(missing(timescale)){timescale<-NULL}
+  if(missing(timerange)){timerange<-NULL}
+  if(missing(vastmodel)){vastmodel<-NULL}
+  if(missing(stats)){stats<-list(AIC=NULL,RMSE=NULL,rho=NULL)}
+  if(missing(preds)){preds<-NULL}
+  if(missing(eval)){eval<-NULL}
+  if(missing(spacedata)){spacedata<-NULL}
+  if(missing(timedata)){timedata<-NULL}
+  if(missing(aucdata)){aucdata<-NULL}
+  if(missing(covariates)){covariates<-list(covariatedata=NULL,pformula=stats::formula(~0),pconfig=NULL,
+                                           dformula=stats::formula(~0),dconfig=NULL)}
+
+  StreamVAST<-list(countdata=countdata,reachdata=reachdata,surveydata=surveydata,vastinput=vastinput,vastnetwork=vastnetwork,
+                   vastnetworkLL=vastnetworkLL,title=title,countname=countname,reachname=reachname,vastdata=vastdata,
+                   timetable=timetable,timescale=timescale,timerange=timerange,vastmodel=vastmodel,stats=stats,
+                   preds=preds,eval=eval,spacedata=spacedata,timedata=timedata,aucdata=aucdata,unitconv=unitconv,
+                   covariates=covariates)
+
+  class(StreamVAST)<-"streamvast"
+  return(StreamVAST)
 }
 
 
-#' Get density predictions from a VAST model
+#' This function takes a streamvast object defines a temporal sampling frame and formats everything for use with vast
 #'
-#' This function quickly constructs a data frame with VAST density predictions matched to
-#' time and space. It also samples and provides upper and lower bounds (90%)
-#'
-#' @param model A VAST model object
-#' @param time A name for the time variable for the output data frame
-#' @param space A name for the space variable for the output data frame
-#' @param time.table An optional table matching time to a date, used to provide year, month, and day
-#' @param sim.data If you already have a simulated data, save time by supplying it here
-#'
-#' @return A data frame with density predictions with uncertainty match to space and time
-#' @export
-#'
-#' @examples
-VASTpreds<-function(model,time="Time",space="Reach",time.table=NA,sim.data){
-
-  #Setup
-  report.dims<-dim(model$Report$D_gct)
-  year.names<-names(model$Report$D_gct[1,1,])
-  if(is.null(year.names)){year.names<-1:report.dims[3]}
-
-  out.data<-data.frame(Time=rep(as.integer(year.names),each=report.dims[1]),
-                       space=rep(1:(report.dims[1]),times=length(year.names)))
-  names(out.data)<-c(time,space)
-
-  # if supplied, expand the date information
-  if(is.data.frame(time.table)){
-    match.vec<-match(out.data$Time,time.table$Time)
-    if(time!="Year"){out.data$Year<-time.table$Year[match.vec]}
-    if(time!="Month"){out.data$Month<-as.integer(format(time.table$Refdate[match.vec],format="%m"))}
-    if(time!="Day"){out.data$Day<-as.integer(format(time.table$Refdate[match.vec],format="%j"))}
-  }
-
-  out.data<-cbind(out.data,data.frame(density=rep(NA,nrow(out.data)),lower=rep(NA,nrow(out.data)),
-                                      upper=rep(NA,nrow(out.data))))
-  # simulate the data for CIs
-  if(missing(sim.data)){
-    sim.data<-FishStatsUtils::sample_variable(Sdreport=model$parameter_estimates$SD,Obj=model$tmb_list$Obj,
-                                              variable_name="D_gct",n_samples = 100)
-  }
-  # quick loop to grab the values
-  for(i in 1:report.dims[3]){
-    spots<-(1+(i-1)*report.dims[1]):(i*report.dims[1])
-    out.data$density[spots]<-model$Report$D_gct[,1,i]
-    out.data$lower[spots]<-apply(sim.data[,1,i,],MARGIN = 1,FUN = stats::quantile,probs=.05)
-    out.data$upper[spots]<-apply(sim.data[,1,i,],MARGIN = 1,FUN = stats::quantile,probs=.95)
-  }
-
-  # covert density into redd predictions
-  input.grid<-unique(model$input_args$extra_args$input_grid)
-
-  out.data$Length<-input.grid$Area_km2[match(out.data$Reach,input.grid$child_i)]
-  out.data$count<-out.data$density*out.data$Length
-  out.data$lowercount<-out.data$lower*out.data$Length
-  out.data$uppercount<-out.data$upper*out.data$Length
-
-  return(out.data)
-}
-
-
-#' Get predictions matched to observations from a vast model
-#'
-#' @param model A VAST model object
-#' @param data The model data used to fit the VAST model
-#' @param effort A name for the column with effort information
-#' @param time.table An optional table matching time to a date, used to provide year, month, and day
-#'
-#' @return A data frame of observed densities and counts matched to predictions
-#' @export
-#'
-#' @examples
-VASTeval<-function(model,data,effort="Effort",time.table=NA){
-
-  sim.data<-FishStatsUtils::sample_variable(Sdreport=model$parameter_estimates$SD,Obj=model$tmb_list$Obj,
-                                            variable_name="D_i",n_samples = 100)
-
-  out.data<-data.frame(data,
-                       pDensity=model$Report$D_i/data[,effort],
-                       pDensity_lower=apply(sim.data/data[,effort],MARGIN = 1,FUN=stats::quantile,probs=.05),
-                       pDensity_upper=apply(sim.data/data[,effort],MARGIN = 1,FUN=stats::quantile,probs=.95),
-                       pRedds=model$Report$D_i)
-  out.data$pRedds_lower<-apply(sim.data,MARGIN = 1,FUN=stats::quantile,probs=.05)
-  out.data$pRedds_upper<-apply(sim.data,MARGIN = 1,FUN=stats::quantile,probs=.95)
-
-  return(subset(out.data,dummy==F))
-}
-
-
-
-#' This function takes data from the Load Stream data function and formats it for use with VAST
-#'
-#' @param data a data frame with time, space, effort, and observations
-#' @param reachdata A sf object, presumably from LoadStreamData
-#' @param unit.conv a unit conversion for distances
-#' @param countname the name in data that corresponds to the Redd count
+#' @param streamvast a streamvast object, minimally with countdata, reachdata defined
 #' @param startdate dates to truncate or expand the data in yyyy-mm-dd format
 #' @param enddate dates to truncate or expand the data in yyyy-mm-dd format
 #' @param padzero should survey with zero observations be added at start/end dates
@@ -217,18 +204,17 @@ VASTeval<-function(model,data,effort="Effort",time.table=NA){
 #' @export
 #'
 #' @examples
-MakeVASTData<-function(data, reachdata,unit.conv=1, countname="Redds",
-                       startdate=NA,enddate=NA,padzero=T, Time="Year"){
+SetTemporalFrame<-function(streamvast,startdate=NA,enddate=NA,padzero=T,Time="Year"){
 
-  if(Time=="Year"){timeformat<-"%Y"}
-  if(Time=="Month"){timeformat<-"%Y-%m"}
-  if(Time%in%c("Biweek","Week","Day")){timeformat<-"%Y-%j"}
+  if(length(streamvast$timetable)>0){warning("Temporal sampling frame already defined for this object. Overwriting pre-existing temporal frame.")}
 
-  tdivide<-ifelse(Time=="Biweek",14,ifelse(Time=="Week",7,1))
+  if(tolower(Time)=="year"){timeformat<-"%Y"}
+  if(tolower(Time)=="month"){timeformat<-"%Y-%m"}
+  if(tolower(Time)%in%c("biweek","week","day")){timeformat<-"%Y-%j"}
+  tdivide<-ifelse(tolower(Time)=="biweek",14,ifelse(tolower(Time)=="week",7,1))
 
   #Get the dates ; fun note, "ifelse" will screw up dates
-  data.dates<-as.Date(paste(data$Year,data$Day,sep="-"),format="%Y-%j")
-
+  data.dates<-as.Date(paste(streamvast$countdata$Year,streamvast$countdata$Day,sep="-"),format="%Y-%j")
   if(is.na(startdate)){
     startdate<-min(data.dates)
   }else{
@@ -243,7 +229,10 @@ MakeVASTData<-function(data, reachdata,unit.conv=1, countname="Redds",
   data.dates2<-c(startdate,data.dates,enddate)
 
   # prune data, if necessary
-  data<-data[data.dates>=startdate & data.dates<=enddate,]
+  good.data<-streamvast$countdata[data.dates>=startdate & data.dates<=enddate,]
+  good.dates<-data.dates[data.dates>=startdate & data.dates<=enddate]
+  habitat.reaches<-streamvast$reachdata[streamvast$reachdata$habitat==T,]
+  habitat.ids<-habitat.reaches$vastid
 
   # Now need to go through and get tables that convert dates into sequential time steps
   minyear<-as.integer(format(startdate,"%Y"))
@@ -251,8 +240,8 @@ MakeVASTData<-function(data, reachdata,unit.conv=1, countname="Redds",
   nyears<-length(minyear:maxyear)
   if(Time=="Year"){
     time.table<-data.frame(Time=1:nyears,Year=minyear:maxyear,Key=minyear:maxyear,
-                           Refdate=as.Date(paste(minyear:maxyear,round(mean(data$Day)),sep="-"),format="%Y-%j"))
-    data$Key<-data$Year
+                           Refdate=as.Date(paste(minyear:maxyear,round(mean(good.data$Day)),sep="-"),format="%Y-%j"))
+    good.data$Key<-good.data$Year
   }else{
     firstt<-ceiling(as.integer(format(startdate,strsplit(timeformat,split="-")[[1]][2]))/tdivide)
     lastt<-ceiling(as.integer(format(enddate,strsplit(timeformat,split="-")[[1]][2]))/tdivide)
@@ -271,96 +260,93 @@ MakeVASTData<-function(data, reachdata,unit.conv=1, countname="Redds",
 
     time.table$Key<-paste(time.table$Year,time.table[,Time],sep="-")
 
-    if(Time=="Month"){time.table$Refdate<-as.Date(paste(time.table$Year,time.table[,Time],15,sep="-"),format="%Y-%m-%d")}
-    if(Time=="Biweek"){
+    if(tolower(Time)=="month"){time.table$Refdate<-as.Date(paste(time.table$Year,time.table[,Time],15,sep="-"),format="%Y-%m-%d")}
+    if(tolower(Time)=="biweek"){
       days<-ifelse((time.table[,Time]-1)*14+7>365,365,(time.table[,Time]-1)*14+7)
       time.table$Refdate<-as.Date(paste(time.table$Year,days,sep="-"),format="%Y-%j")
     }
-    if(Time=="Week"){
+    if(tolower(Time)=="week"){
       days<-ifelse((time.table[,Time]-1)*7+4>365,365,(time.table[,Time]-1)*7+4)
       time.table$Refdate<-as.Date(paste(time.table$Year,days,sep="-"),format="%Y-%j")
     }
-    if(Time=="Day"){time.table$Refdate<-as.Date(paste(time.table$Year,time.table[,Time],sep="-"),format="%Y-%j")}
+    if(tolower(Time)=="day"){time.table$Refdate<-as.Date(paste(time.table$Year,time.table[,Time],sep="-"),format="%Y-%j")}
 
-    data$Key<-paste(data$Year,ceiling(as.integer(format(data.dates,format=strsplit(timeformat,split="-")[[1]][2]))/tdivide),sep="-")
+    good.data$Key<-paste(good.data$Year,ceiling(as.integer(format(good.dates,format=strsplit(timeformat,split="-")[[1]][2]))/tdivide),sep="-")
   }
   time.table$Day<-as.integer(format(time.table$Refdate,format="%j"))
 
   # Set up some reach info
-  midpoints<-as.data.frame(sf::st_coordinates(sf::st_transform(sf::st_line_sample(x=reachdata,sample = .5),crs = "wgs84")))[,1:2]
-  midpoints$Reach<-reachdata$reachid
+  midpoints<-as.data.frame(sf::st_coordinates(sf::st_transform(sf::st_line_sample(x=habitat.reaches,sample = .5),crs = "wgs84")))[,1:2]
+  midpoints$vastid<-habitat.ids
 
   # Get the preliminary output object that has just the original data
-  out.data<-data.frame(Time=time.table$Time[match(data$Key,time.table$Key)],
-                       Year=data$Year,
-                       Day=data$Day,
-                       Month=data$Month,
-                       Reach=data$Reach,
-                       Redds=data[,countname],
-                       Density=data[,countname]/data$Effort,
-                       Area=data$Area,
-                       Effort=data$Effort,
-                       Lat=midpoints[match(x=data$Reach,midpoints$Reach),2],
-                       Lon=midpoints[match(x=data$Reach,midpoints$Reach),1],
+  out.data<-data.frame(Time=time.table$Time[match(good.data$Key,time.table$Key)],
+                       Year=good.data$Year,
+                       Day=good.data$Day,
+                       Month=good.data$Month,
+                       Reach=good.data$Reach,
+                       vastid=good.data$vastid,
+                       Counts=good.data[,streamvast$countname],
+                       Density=good.data[,streamvast$countname]/good.data$Effort,
+                       Area=good.data$Area,
+                       Effort=good.data$Effort,
+                       Lat=midpoints[match(x=good.data$vastid,midpoints$vastid),2],
+                       Lon=midpoints[match(x=good.data$vastid,midpoints$vastid),1],
                        original=T,
                        dummy=F)
 
   # Now make padding data, if adding zeros to the ends of each season
   if(padzero){
-    if(Time=="Year"){stop("Padding with zeros doesn't make sense with an annual time scale")}
+    if(tolower(Time)=="year"){stop("Padding with zeros doesn't make sense with an annual time scale")}
 
-    # lot's of tricksy formatting with dates
-    frontpad<-as.Date(paste(minyear:maxyear,format(startdate,"%j"),sep="-"),format="%Y-%j")
-    frontpad.time0<-ceiling(as.integer(strsplit(format(frontpad,timeformat),split="-")[[1]][2])/tdivide)
-    frontpad.time<-time.table$Time[match(paste((minyear:maxyear),frontpad.time0,sep="-"),time.table$Key)]
+    front.time<-aggregate(time.table$Time,by=list(time.table$Year),FUN=min)
+    back.time<-aggregate(time.table$Time,by=list(time.table$Year),FUN=max)
 
-    backpad<-as.Date(paste(minyear:maxyear,format(enddate,"%j"),sep="-"),format="%Y-%j")
-    backpad.time0<-ceiling(as.integer(strsplit(format(backpad,timeformat),split="-")[[1]][2])/tdivide)
-    backpad.time<-time.table$Time[match(paste((minyear:maxyear),backpad.time0,sep="-"),time.table$Key)]
-
+    # for each year, we check which reaches were sampled in the earliest and latest time frame for that year
     for(y in 1:nyears){
       yeardata<-subset(out.data,Year==((minyear:maxyear)[y]))
-      yeardata$Date<-as.Date(paste(yeardata$Year,yeardata$Day,sep="-"),format="%Y-%j")
 
       if(nrow(yeardata)>0){
-        front.check<-stats::aggregate(yeardata$Date,by=list(yeardata$Reach),FUN=function(x){return(min(x)<=frontpad[y])})
-        back.check<-stats::aggregate(yeardata$Date,by=list(yeardata$Reach),FUN=function(x){return(min(x)>=backpad[y])})
+        front.check<-stats::aggregate(yeardata$Time,by=list(yeardata$vastid),FUN=function(x){return(min(x)==front.time$x[y])})
+        back.check<-stats::aggregate(yeardata$Time,by=list(yeardata$vastid),FUN=function(x){return(max(x)==back.time$x[y])})
 
-        not.sampled<-which(1:nrow(reachdata)%in%yeardata$Reach==F)
-        needs.front<-c(not.sampled,front.check$Group.1[front.check$x==F])
-        needs.back<-c(not.sampled,back.check$Group.1[front.check$x==F])
+        not.sampled<-habitat.ids[which(habitat.ids%in%yeardata$vastid==F)]
+        needs.front<-sort(c(not.sampled,front.check$Group.1[front.check$x==F]))
+        needs.back<-sort(c(not.sampled,back.check$Group.1[back.check$x==F]))
       }else{
-        needs.front<-reachdata$reachid
-        needs.back<-reachdata$reachid
+        needs.front<-habitat.ids
+        needs.back<-habitat.ids
       }
       if(length(needs.front)>0){
-        front.data<-data.frame(Time=frontpad.time[y],
+        front.data<-data.frame(Time=front.time$x[y],
                                Year=(minyear:maxyear)[y],
-                               Day=as.integer(format(time.table$Refdate[match(frontpad.time[y],time.table$Time)],"%j")),
-                               Month=format(time.table$Refdate[match(frontpad.time[y],time.table$Time)],"%b"),
-                               Reach=needs.front,
-                               Redds=0,
+                               Day=time.table$Day[time.table$Time==front.time$x[y]],
+                               Month=format(time.table$Refdate[match(front.time$x[y],time.table$Time)],"%b"),
+                               Reach=as.data.frame(habitat.reaches)[match(needs.front,habitat.reaches$vastid),streamvast$reachname],
+                               vastid=needs.front,
+                               Counts=0,
                                Density=0,
-                               Area=as.numeric(reachdata$Length[match(needs.front,reachdata$reachid)]),
-                               Effort=as.numeric(reachdata$Length[match(needs.front,reachdata$reachid)]),
-                               Lat=midpoints[match(needs.front,reachdata$reachid),2],
-                               Lon=midpoints[match(needs.front,reachdata$reachid),1],
+                               Area=as.numeric(streamvast$reachdata$Length[needs.front]),
+                               Effort=as.numeric(streamvast$reachdata$Length[needs.front]),
+                               Lat=midpoints[match(needs.front,habitat.ids),2],
+                               Lon=midpoints[match(needs.front,habitat.ids),1],
                                original=F,
                                dummy=F)
         out.data<-rbind(out.data,front.data)
       }
       if(length(needs.back)>0){
-        back.data<-data.frame(Time=backpad.time[y],
+        back.data<-data.frame(Time=back.time$x[y],
                               Year=(minyear:maxyear)[y],
-                              Day=as.integer(format(time.table$Refdate[match(backpad.time[y],time.table$Time)],"%j")),
-                              Month=format(time.table$Refdate[match(backpad.time[y],time.table$Time)],"%b"),
-                              Reach=needs.back,
-                              Redds=0,
+                              Day=time.table$Day[time.table$Time==back.time$x[y]],
+                              Month=format(time.table$Refdate[match(back.time$x[y],time.table$Time)],"%b"),
+                              Reach=as.data.frame(habitat.reaches)[match(needs.back,habitat.reaches$vastid),streamvast$reachname],
+                              vastid=needs.back,
+                              Counts=0,
                               Density=0,
-                              Area=as.numeric(reachdata$Length[match(needs.back,reachdata$reachid)]),
-                              Effort=as.numeric(reachdata$Length[match(needs.back,reachdata$reachid)]),
-                              Lat=midpoints[match(needs.back,reachdata$reachid),2],
-                              Lon=midpoints[match(needs.back,reachdata$reachid),1],
+                              Area=as.numeric(streamvast$reachdata$Length[needs.back]),
+                              Effort=as.numeric(streamvast$reachdata$Length[needs.back]),
+                              Lat=midpoints[match(needs.back,habitat.ids),2],
+                              Lon=midpoints[match(needs.back,habitat.ids),1],
                               original=F,
                               dummy=F)
         out.data<-rbind(out.data,back.data)
@@ -369,7 +355,9 @@ MakeVASTData<-function(data, reachdata,unit.conv=1, countname="Redds",
   }
 
   # Now to make the dummy data that signals VAST to interpolate a prediction
-  checklist<-data.frame(Time=rep(time.table$Time,nrow(reachdata)),Reach=rep(1:nrow(reachdata),each=nrow(time.table)))
+  checklist<-data.frame(Time=rep(time.table$Time,nrow(habitat.reaches)),
+                        vastid=rep(habitat.reaches$vastid,each=nrow(time.table)),
+                        Reach=rep(as.data.frame(habitat.reaches)[,streamvast$reachname],each=nrow(time.table)))
   checklist$Year<-time.table$Year[match(checklist$Time,time.table$Time)]
   checklist$Key<-time.table$Key[match(checklist$Time,time.table$Time)]
   checklist$Refdate<-time.table$Refdate[match(checklist$Time,time.table$Time)]
@@ -384,15 +372,15 @@ MakeVASTData<-function(data, reachdata,unit.conv=1, countname="Redds",
                            Day=as.integer(format(checklist$Refdate[missing.vec],"%j")),
                            Month=format(checklist$Refdate[missing.vec],"%b"),
                            Reach=checklist$Reach[missing.vec],
-                           Redds=0,
+                           vastid=checklist$vastid[missing.vec],
+                           Counts=0,
                            Density=0,
-                           Area=reachdata$Length[match(checklist$Reach[missing.vec],reachdata$reachid)],
-                           Effort=reachdata$Length[match(checklist$Reach[missing.vec],reachdata$reachid)],
-                           Lat=midpoints$Y[match(checklist$Reach[missing.vec],midpoints$Reach)],
-                           Lon=midpoints$X[match(checklist$Reach[missing.vec],midpoints$Reach)],
+                           Area=habitat.reaches$Length[match(checklist$vastid[missing.vec],habitat.ids)],
+                           Effort=habitat.reaches$Length[match(checklist$vastid[missing.vec],habitat.ids)],
+                           Lat=midpoints$Y[match(checklist$vastid[missing.vec],midpoints$vastid)],
+                           Lon=midpoints$X[match(checklist$vastid[missing.vec],midpoints$vastid)],
                            original=F,
                            dummy=T)
-
 
   out.data<-rbind(out.data,missing.data)
   # quick fix to months
@@ -406,17 +394,802 @@ MakeVASTData<-function(data, reachdata,unit.conv=1, countname="Redds",
   time.table$Original<-F
   time.table$Original[time.table$Time%in%x$Time[which(x$x==1)]]<-T
 
-  return(list(out.data,time.table))
+  names(out.data)[names(out.data)=="Reach"]<-streamvast$reachname
+  names(out.data)[names(out.data)=="Counts"]<-streamvast$countname
+
+  streamvast$vastinput<-streamvast$vastinput[match(out.data$vastid,streamvast$vastinput$child_i),]
+  streamvast$vastdata<-out.data
+  streamvast$timetable<-time.table
+  streamvast$timescale<-Time
+  streamvast$timerange<-c(startdate,enddate)
+
+  return(streamvast)
+}
+
+
+# This function adds covariates to a streamvast object
+# There are two methods: If you wish to manually supply covariates, use the covariatedata argument (must match to vastdata)
+# alternately, supply tables to match spatially, temporally, or both and the function will construct covariatedata for you
+# formulas default toward being off, so the user must supply at least one
+# the function will provide a basic default if the configurations are left blank
+
+#' Add habitat covariates to a streamvast object
+#'
+#' @param streamvast
+#' @param pform
+#' @param dform
+#' @param pconfig
+#' @param dconfig
+#' @param spcovars
+#' @param tempcovars
+#' @param sptpcovars
+#' @param covariatedata
+#' @param append
+#' @param center
+#' @param scale
+#'
+#' @return
+#' @export
+#'
+#' @examples
+SetVastCovariates<-function(streamvast,pform,dform,pconfig=NULL,dconfig=NULL,spcovars,tempcovars,sptpcovars,covariatedata,
+                            append=T,center=T,scale=T){
+
+  # checks; may wish to add more later on
+  if(missing(pform) & missing(dform)){stop("Must specify at least one formula pform or dform, or else no point to covariates!")}
+  if(missing(pform)){pform=stats::formula(~0)}
+  if(missing(dform)){dform=stats::formula(~0)}
+  if(inherits(pform,"formula")==F){pform<-stats::as.formula(pform)}
+  if(inherits(dform,"formula")==F){pform<-stats::as.formula(dform)}
+
+
+  if(is.null(streamvast$vastdata)){stop("Please format the time frame for the model (streamvast::SetTemporalFrame) before adding covariates!")}
+
+  out.data<-streamvast$vastdata[,c("Time",streamvast$reachname,"vastid","Lat","Lon","original","dummy")]
+  exclude.names<-c(names(out.data),"Year") # Note, we will change time to year at the end of the function
+
+  #check for preexisting covariate data
+  old.covs<-NULL
+  if(is.null(streamvast$covariates$covariatedata)==F){
+    if(append){
+      print("Appending new covariates to pre-existing data")
+      old.covs<-names(streamvast$covariates$covariatedata)
+      out.data<-cbind(out.data,subset(streamvast$covariates$covariatedata,select=which(old.covs%in%exclude.names==F)))
+      exclude.names<-unique(c(exclude.names,old.covs))
+    }
+    if(append==F){
+      print("Overwriting pre-existing covariate data")
+    }
+  }
+
+  # if covariatedata has been specified, transfer it over first
+  if(missing(covariatedata)==F){
+    if(nrow(covariatedata)!=nrow(streamvast$vastdata)){stop("Covariatedata must have the same number of rows as vastdata!")}
+    if(inherits(covariatedata,"sf")){covariatedata<-sf::st_drop_geometry(covariatedata)}
+    new.covs<-names(covariatedata)
+
+    good.new.names<-which(new.covs%in%exclude.names==F)
+    new.data<-subset(covariatedata,select=good.new.names)
+
+    if(center){
+      number.covs<-which(unlist(lapply(new.data,inherits,what=c("integer","numeric"))))
+      if(length(number.covs)>0){
+        num.data<-subset(new.data,select=number.covs)
+        new.data[,number.covs]<-num.data-rep(apply(num.data,2,mean),each=nrow(new.data))
+      }
+    }
+    if(scale){
+      number.covs<-which(unlist(lapply(new.data,inherits,what=c("integer","numeric"))))
+      if(length(number.covs)>0){
+        num.data<-subset(new.data,select=number.covs)
+        new.data[,number.covs]<-num.data/rep(sqrt(apply(num.data,2,var)),each=nrow(new.data))
+      }
+    }
+    out.data<-cbind(out.data,new.data)
+    exclude.names<-unique(c(exclude.names,new.covs))
+  }
+
+  # next we'll do spatial covariates
+  if(missing(spcovars)==F){
+    if(inherits(spcovars,"sf")){spcovars<-sf::st_drop_geometry(spcovars)}
+    space.names<-names(spcovars)
+    has.reachname<-streamvast$reachname%in%space.names
+    has.vastid<-"vastid"%in%space.names
+    match.name<-ifelse(has.reachname,streamvast$reachname,ifelse(has.vastid,"vastid",NA))
+    if(is.na(match.name)){
+      stop("Could not match spcovars to vastdata. The best way to do this is to include a column with a reach identifier is spcovars.")
+    }
+    good.space.names<-which(space.names%in%exclude.names==F)
+    match.vec<-match(out.data[,match.name],spcovars[,match.name])
+    space.data<-subset(spcovars,select=good.space.names)[match.vec,]
+
+    if(center){
+      number.covs<-which(unlist(lapply(space.data,inherits,what=c("integer","numeric"))))
+      if(length(number.covs)>0){
+        num.data<-subset(space.data,select=number.covs)
+        space.data[,number.covs]<-num.data-rep(apply(num.data,2,mean),each=nrow(space.data))
+      }
+    }
+    if(scale){
+      number.covs<-which(unlist(lapply(space.data,inherits,what=c("integer","numeric"))))
+      if(length(number.covs)>0){
+        num.data<-subset(space.data,select=number.covs)
+        space.data[,number.covs]<-num.data/rep(sqrt(apply(num.data,2,var)),each=nrow(space.data))
+      }
+    }
+    out.data<-cbind(out.data,space.data)
+    exclude.names<-unique(c(exclude.names,space.names))
+  }
+
+  #Next we'll do temporal covariates
+  if(missing(tempcovars)==F){
+    if(inherits(tempcovars,"sf")){tempcovars<-sf::st_drop_geometry(tempcovars)}
+    temp.names<-names(tempcovars)
+    has.time<-"Time"%in%temp.names
+    has.timescale<-streamvast$timescale%in%temp.names
+    match.name<-ifelse(has.time,"Time",ifelse(has.timescale,streamvast$timescale,NA))
+    if(is.na(match.name)){
+      stop("Could not match tempcovars to vastdata. The best way to do this is to include a column with a 'Time' identifier to tempcovars")
+    }
+    good.time.names<-which(temp.names%in%exclude.names==F)
+    match.vec<-match(out.data[,match.name],tempcovars[,match.name])
+    time.data<-subset(tempcovars,select=good.time.names)[match.vec,]
+
+    if(center){
+      number.covs<-which(unlist(lapply(time.data,inherits,what=c("integer","numeric"))))
+      if(length(number.covs)>0){
+        num.data<-subset(time.data,select=number.covs)
+        time.data[,number.covs]<-num.data-rep(apply(num.data,2,mean),each=nrow(time.data))
+      }
+    }
+    if(scale){
+      number.covs<-which(unlist(lapply(time.data,inherits,what=c("integer","numeric"))))
+      if(length(number.covs)>0){
+        num.data<-subset(time.data,select=number.covs)
+        time.data[,number.covs]<-num.data/rep(sqrt(apply(num.data,2,var)),each=nrow(time.data))
+      }
+    }
+    out.data<-cbind(out.data,time.data)
+    exclude.names<-unique(c(exclude.names,temp.names))
+  }
+
+  names(out.data)[names(out.data)=="Time"]<-"Year"
+  streamvast$covariates<-list(pformula=pform,pconfig=pconfig,dformula=dform,dconfig=dconfig,covariatedata=out.data)
+  return(streamvast)
+}
+
+
+# This runs a number of variations of a basic vast model and returns the one with the best AIC
+# laster versions may offer some choice as to which stat to use to evaluate
+# also covariates are not implemented at the moment
+#' Title
+#'
+#' @param streamvast      # a streamvast object with a defined temporal frame
+#' @param vastsettings    # a list of settings for a vast model
+#' @param optimize        # logical, should the algorthim run multiple models with varying settings
+#' @param maxiter         # a maximum number of iterations to try before giving up
+#'
+#' @return
+#' @export
+#'
+#' @examples
+RunVAST<-function(streamvast,vastsettings,covariatedata,covform.list,optimize=T,compute.stats=F,maxiter=3){
+
+  if(length(streamvast$preds)>0){warning("VAST model already present. Overwriting pre-existing model.")}
+
+  if(is.null(vastsettings)){
+    if(missing(vastsettings)){
+      vastsettings <- FishStatsUtils::make_settings(Region="stream_network",
+                                                    zone=10,                      # we'll need to generalize this eventually, not sure how
+                                                    purpose = "index2",
+                                                    fine_scale=F,
+                                                    n_x = sum(streamvast$reachdata$habitat==T),
+                                                    FieldConfig = c("Omega1"= 1, "Epsilon1" = 1, "Omega2" = 1, "Epsilon2" = 1),
+                                                    RhoConfig = c("Beta1" = 2, "Epsilon1" = 2, "Beta2" = 2, "Epsilon2" = 2),
+                                                    OverdispersionConfig = c("Eta1" = 0, "Eta2" = 0),
+                                                    ObsModel = c(5, 0),
+                                                    bias.correct = F,
+                                                    use_anisotropy = F)
+      vastsettings$Method<-"Stream_network"
+      vastsettings$grid_size_km<-mean(streamvast$reachdata$Length[streamvast$reachdata$habitat==T])
+    }
+  }else{
+    optimize<-F
+  }
+
+  nmodels<-ifelse(optimize,6,1)
+  if(optimize){fit.list<-list(NA,NA,NA,NA,NA,NA)}
+  if(optimize==F){fit.list<-list(NA)}
+  aic.vec<-rep(NA,nmodels)
+  converge.vec<-rep(F,nmodels)
+  settings.list<-list()
+
+  for(i in 1:nmodels){
+    # will update settings to test alternate versions
+    if(i==2){
+      vastsettings$FieldConfig = c("Omega1"= 1, "Epsilon1" = 1, "Omega2" = 1, "Epsilon2" = 0)
+      vastsettings$RhoConfig = c("Beta1" = 2, "Epsilon1" = 2, "Beta2" = 2, "Epsilon2" = 0)
+    }
+    if(i==3){
+      vastsettings$FieldConfig = c("Omega1"= 1, "Epsilon1" = 1, "Omega2" = 0, "Epsilon2" = 0)
+    }
+    if(i==4){
+      vastsettings$FieldConfig = c("Omega1"= 1, "Epsilon1" = 1, "Omega2" = 1, "Epsilon2" = 1)
+      vastsettings$RhoConfig = c("Beta1" = 2, "Epsilon1" = 2, "Beta2" = 2, "Epsilon2" = 2)
+      vastsettings$ObsModel = c(7,0)
+    }
+    if(i==5){
+      vastsettings$FieldConfig = c("Omega1"= 1, "Epsilon1" = 1, "Omega2" = 1, "Epsilon2" = 0)
+      vastsettings$RhoConfig = c("Beta1" = 2, "Epsilon1" = 2, "Beta2" = 2, "Epsilon2" = 0)
+    }
+    if(i==6){
+      vastsettings$FieldConfig = c("Omega1"= 1, "Epsilon1" = 1, "Omega2" = 0, "Epsilon2" = 0)
+    }
+    settings.list[[i]]<-vastsettings
+
+    not.converged<-T
+    niter=1
+
+    while(not.converged & niter<=maxiter){
+      try(fit.list[[i]]<-FishStatsUtils::fit_model("settings" = vastsettings,
+                                                   Lat_i = streamvast$vastdata$Lat,
+                                                   Lon_i = streamvast$vastdata$Lon,
+                                                   t_i = as.integer(streamvast$vastdata$Time),
+                                                   b_i = units::as_units(streamvast$vastdata[,streamvast$countname],"count"),
+                                                   a_i = units::as_units(streamvast$vastdata$Effort,"km"),
+                                                   test_fit = FALSE,
+                                                   PredTF_i=streamvast$vastdata$dummy,
+                                                   input_grid=streamvast$vastinput,
+                                                   Network_sz=streamvast$vastnetwork,
+                                                   Network_sz_LL=streamvast$vastnetworkLL,
+                                                   covariate_data = streamvast$covariates$covariatedata,
+                                                   X1config_cp = streamvast$covariates$pconfig,
+                                                   X1_formula = streamvast$covariates$pformula,
+                                                   X2config_cp = streamvast$covariates$dconfig,
+                                                   X2_formula = streamvast$covariates$dformula,
+                                                   newtonsteps = 3,
+                                                   Aniso=F,
+                                                   getsd=T,
+                                                   getHessian=T,
+                                                   max_cells=nrow(streamvast$vastdata),
+                                                   Options = c('treat_nonencounter_as_zero' = F),
+                                                   control=list(eval.max=500,iter.max=500,trace=1)))
+      if(is.na(fit.list[[i]])[1]==F){
+        if(length(fit.list[[i]]$Report)>1){
+          not.converged<-F
+          converge.vec[i]<-T
+          aic.vec[i]<-fit.list[[i]]$parameter_estimates$AIC
+        }else{
+          fit.list[[i]]<-NA
+        }
+      }
+      niter<-niter+1
+    }
+  }
+  if(all(converge.vec==F)){stop("Failed to produce a successful model. Review settings and data structure.")}
+
+  streamvast$vastmodel<-fit.list[[which.min(aic.vec)]]
+  streamvast$vastsettings<-settings.list[[which.min(aic.vec)]]
+  streamvast$stats$AIC<-min(aic.vec,na.rm=T)
+
+  #consider running the stats as well
+  if(compute.stats){
+    print("Model fitting successful. Computing summary statistics and prediction/evaluation data.")
+    streamvast<-VASTpreds(streamvast)
+  }
+
+  return(streamvast)
+}
+
+
+#' Get density predictions from a VAST model
+#'
+#' This function quickly constructs a data frame with VAST density predictions matched to
+#' time and space. It also samples and provides upper and lower bounds (90%)
+#'
+#' @param streamvast A VAST model object
+#'
+#' @return A streamvast object with a dataframe of predictions added
+#' @export
+#'
+#' @examples
+VASTpreds<-function(streamvast){
+
+  if(length(streamvast$preds)>0){warning("Prediction data already found. Overwriting pre-existing data.")}
+  if(length(streamvast$eval)>0){warning("Evaluation data already found. Overwriting pre-existing data.")}
+  if(length(streamvast$aucdata)>0){warning("AUC or Index data already found. Overwriting pre-existing data.")}
+
+  #Setup
+  print("Simulating predicted density distribution")
+  report.dims<-dim(streamvast$vastmodel$Report$D_gct)
+  habitat.reaches<-subset(streamvast$reachdata,habitat==T)
+
+  preddata<-data.frame(Time=rep(1:report.dims[3],each=report.dims[1]),
+                       vastid=rep(1:report.dims[1],times=report.dims[3]),
+                       Reach=NA,
+                       Length=rep(habitat.reaches$Length,times=report.dims[3]),
+                       Date=rep(streamvast$timetable$Refdate,each=report.dims[1]),
+                       Year=rep(streamvast$timetable$Year,each=report.dims[1]),
+                       Month=rep(format(streamvast$timetable$Refdate,format="%b"),each=report.dims[1]),
+                       Day=rep(streamvast$timetable$Day,each=report.dims[1]),
+                       Density=NA,
+                       Density_upper=NA,
+                       Density_lower=NA,
+                       Density_stdev=NA,
+                       Count=NA,
+                       Count_upper=NA,
+                       Count_lower=NA,
+                       Count_stdev=NA)
+
+  preddata$Reach<-as.data.frame(habitat.reaches)[match(preddata$vastid,habitat.reaches$vastid),streamvast$reachname]
+
+  # simulate the data for CIs
+  pred.sim<-FishStatsUtils::sample_variable(Sdreport=streamvast$vastmodel$parameter_estimates$SD,
+                                            Obj=streamvast$vastmodel$tmb_list$Obj,variable_name="D_gct",n_samples = 100)
+  # quick loop to grab the values
+  for(i in 1:report.dims[3]){
+    spots<-(1+(i-1)*report.dims[1]):(i*report.dims[1])
+    preddata$Density[spots]<-streamvast$vastmodel$Report$D_gct[,1,i]
+    preddata$Density_lower[spots]<-apply(pred.sim[,1,i,],MARGIN = 1,FUN = stats::quantile,probs=.05,na.rm=T)
+    preddata$Density_upper[spots]<-apply(pred.sim[,1,i,],MARGIN = 1,FUN = stats::quantile,probs=.95,na.rm=T)
+    preddata$Density_stdev[spots]<-sqrt(apply(pred.sim[,1,i,],MARGIN = 1,FUN = stats::var))
+  }
+
+  preddata$Count<-preddata$Density*preddata$Length
+  preddata$Count_upper<-preddata$Density_upper*preddata$Length
+  preddata$Count_lower<-preddata$Density_lower*preddata$Length
+  preddata$Count_stdev<-preddata$Density_stdev*preddata$Length
+
+  names(preddata)[names(preddata)=="Reach"]<-streamvast$reachname
+  names(preddata)[names(preddata)=="Count"]<-streamvast$countname
+  names(preddata)[names(preddata)=="Count_upper"]<-paste0(streamvast$countname,"_upper")
+  names(preddata)[names(preddata)=="Count_lower"]<-paste0(streamvast$countname,"_lower")
+  names(preddata)[names(preddata)=="Count_stdev"]<-paste0(streamvast$countname,"_stdev")
+
+  # now do evaldata
+  print("Simulating predicted count distribution and residuals")
+  eval.sim<-FishStatsUtils::sample_variable(Sdreport=streamvast$vastmodel$parameter_estimates$SD,
+                                            Obj=streamvast$vastmodel$tmb_list$Obj,variable_name="D_i",n_samples = 100)
+  obs.sim.data<-eval.sim[streamvast$vastdata$dummy==F,]
+  obs.data<-subset(streamvast$vastdata,dummy==F)
+  obs.D_i<-streamvast$vastmodel$Report$D_i[streamvast$vastdata$dummy==F]
+
+  evaldata<-data.frame(Time=obs.data$Time,
+                       Reach=obs.data[,streamvast$reachname],
+                       Year=obs.data$Year,
+                       Month=obs.data$Month,
+                       Day=obs.data$Day,
+                       Count=obs.data[,streamvast$countname],
+                       Density=obs.data$Density,
+                       Effort=obs.data$Effort,
+                       pCount=obs.D_i,
+                       pCount_upper=apply(obs.sim.data,MARGIN = 1,FUN=stats::quantile,probs=.95,na.rm=T),
+                       pCount_lower=apply(obs.sim.data,MARGIN = 1,FUN=stats::quantile,probs=.05,na.rm=T),
+                       pDensity=obs.D_i/obs.data$Effort,
+                       pDensity_upper=apply(obs.sim.data/obs.data$Effort,MARGIN = 1,FUN=stats::quantile,probs=.95,na.rm=T),
+                       pDensity_lower=apply(obs.sim.data/obs.data$Effort,MARGIN = 1,FUN=stats::quantile,probs=.05,na.rm=T),
+                       Residual_count=NA,
+                       Residual_density=NA,
+                       Residual_pearson=NA,
+                       Residual_dharma=NA)
+
+  streamvast$stats$rho<-stats::cor(evaldata[6],evaldata[9],method = "spearman")
+  streamvast$stats$RMSE<-sqrt(sum((evaldata[6]-evaldata[9])^2)/nrow(evaldata))
+
+  #Seems like a good place to do the residuals
+  # note that due to capability issues,  dHARMa requires the vast model to be stored in an object called "fit" in
+  # .GlobalEnv. Therefore, we do some back end work to make sure we don't overwrite the user's data
+  # first we save a backup using a string that is unlikely to be there, then return the original from the backup
+  had.fit<-F
+  if(exists("fit")){
+    name.nobody_would.ever_use<-fit
+    had.fit<-T
+  }
+  fit<<-streamvast$vastmodel
+  dharmaRes <-summary(streamvast$vastmodel, what="residuals", type=1)
+  par(mfrow=c(1,1))
+  rm(fit,envir = .GlobalEnv)
+  if(had.fit){fit<<-name.nobody_would.ever_use}
+
+  evaldata$Residual_count<-evaldata$Count-evaldata$pCount
+  evaldata$Residual_density<-evaldata$Density-evaldata$pDensity
+  evaldata$Residual_pearson<-(evaldata$Density-evaldata$pDensity)/sqrt(evaldata$pDensity)
+  evaldata$Residual_dharma<-dharmaRes$scaledResiduals[streamvast$vastdata$dummy==F]
+
+  names(evaldata)[names(evaldata)=="Count"]<-streamvast$countname
+  names(evaldata)[names(evaldata)=="pCount"]<-paste0("p",streamvast$countname)
+  names(evaldata)[names(evaldata)=="pCount_upper"]<-paste0("p",streamvast$countname,"_upper")
+  names(evaldata)[names(evaldata)=="pCount_lower"]<-paste0("p",streamvast$countname,"_lower")
+  names(evaldata)[names(evaldata)=="Residual_count"]<-paste0("Residual",streamvast$countname)
+
+  # now we will need to compile the aggregate statistics, like reach averages and AUCs
+  spacedata<-data.frame(Reach=as.data.frame(streamvast$reachdata)[,streamvast$reachname],Habitat=streamvast$reachdata$habitat,
+                        Length=streamvast$reachdata$Length,
+                        Density=NA,Count=NA,
+                        pDensity=NA,pDensity_lower=NA,pDensity_upper=NA,pCount=NA,pCount_lower=NA,pCount_upper=NA,
+                        tDensity=NA,tDensity_lower=NA,tDensity_upper=NA,tCount=NA,tCount_lower=NA,tCount_upper=NA)
+  names(spacedata)[1]<-streamvast$reachname
+
+
+  timedata<-data.frame(Time=streamvast$timetable$Time,tframe=streamvast$timetable[,streamvast$timescale],
+                       Year=streamvast$timetable$Year,Month=format(streamvast$timetable$Refdate,format="%b"),
+                       Day=streamvast$timetable$Day,Original=streamvast$timetable$Original,
+                       Density=NA,Count=NA,
+                       pDensity=NA,pDensity_lower=NA,pDensity_upper=NA,pCount=NA,pCount_lower=NA,pCount_upper=NA,
+                       tDensity=NA,tDensity_lower=NA,tDensity_upper=NA,tCount=NA,tCount_lower=NA,tCount_upper=NA)
+
+  if(tolower(streamvast$timescale)=="year"){timedata<-timedata[-3]}
+  if(tolower(streamvast$timescale)=="month"){timedata<-timedata[-4]}
+  if(tolower(streamvast$timescale)=="day"){timedata<-timedata[-5]}
+  names(timedata)[2]<-streamvast$timescale
+
+  # Now that time is set, we can also set up the AUC data objects
+  aucdata<-data.frame(Year=rep(sort(unique(streamvast$timetable$Year)),each=nrow(habitat.reaches)),
+                      Reach=rep(as.data.frame(habitat.reaches)[,streamvast$reachname],times=length(unique(streamvast$timetable$Year))),
+                      AUC=NA,pAUC=NA,pAUC_lower=NA,pAUC_upper=NA,
+                      tAUC=NA,tAUC_lower=NA,tAUC_upper=NA)
+
+  auctotals<-data.frame(Year=sort(unique(streamvast$timetable$Year)),AUC=NA,pAUC=NA,pAUC_lower=NA,pAUC_upper=NA,
+                        tAUC=NA,tAUC_lower=NA,tAUC_upper=NA)
+
+  # we could also put an index in here, but it's low priority for the moment
+
+
+  # Now we will start filling in spacedata
+  for(i in 1:nrow(habitat.reaches)){
+
+    # first do space
+    active.reach<-as.data.frame(habitat.reaches)[i,streamvast$reachname]
+    spot<-which(spacedata[,streamvast$reachname]==active.reach)
+
+    r.simdata<-pred.sim[i,1,,]
+    obs.rows<-which(obs.data[,streamvast$reachname]==active.reach)
+    r.obs.data<-obs.data[obs.rows,]
+
+    # figure out the observed densities and counts
+    if(nrow(r.obs.data)>0){
+      spacedata$Density[spot]<-mean(r.obs.data$Density)
+      spacedata$Count[spot]<-mean(r.obs.data[,streamvast$countname])
+    }else{
+      spacedata$Density[spot]<-NA
+      spacedata$Count[spot]<-NA
+    }
+
+    # then scaled densities and counts
+    if(length(obs.rows)>0){
+      r.data<-matrix(obs.sim.data[obs.rows,],nrow=length(obs.rows),ncol=100)
+      r.data.density<-r.data/obs.data$Effort[obs.rows]
+
+      spacedata$pCount[spot]<-mean(obs.D_i[obs.rows])
+      spacedata$pCount_lower[spot]<-stats::quantile(apply(r.simdata,MARGIN=2,FUN=mean),prob=.05,na.rm=T)
+      spacedata$pCount_upper[spot]<-stats::quantile(apply(r.simdata,MARGIN=2,FUN=mean),prob=.95,na.rm=T)
+
+      spacedata$pDensity[spot]<-mean(obs.D_i[obs.rows]/obs.data$Effort[obs.rows])
+      spacedata$pDensity_lower[spot]<-stats::quantile(apply(r.data.density,MARGIN=2,FUN=mean),prob=.05,na.rm=T)
+      spacedata$pDensity_upper[spot]<-stats::quantile(apply(r.data.density,MARGIN=2,FUN=mean),prob=.95,na.rm=T)
+    }
+
+    # then total densities and counts
+    spacedata$tDensity[spot]<-as.numeric(mean(streamvast$vastmodel$Report$D_gct[i,1,]))
+    spacedata$tDensity_lower[spot]<-quantile(apply(r.data,MARGIN=2,FUN=mean),prob=.05,na.rm=T)
+    spacedata$tDensity_upper[spot]<-quantile(apply(r.data,MARGIN=2,FUN=mean),prob=.95,na.rm=T)
+
+    spacedata$tCount[spot]<-spacedata$tDensity[spot]*spacedata$Length[spot]
+    spacedata$tCount_upper[spot]<-spacedata$tDensity_upper[spot]*spacedata$Length[spot]
+    spacedata$tCount_lower[spot]<-spacedata$tDensity_lower[spot]*spacedata$Length[spot]
+  }
+  # update the names
+  names(spacedata)[which(names(spacedata)=="Count")]<-streamvast$countname
+  names(spacedata)[which(names(spacedata)=="pCount")]<-paste0("p",streamvast$countname)
+  names(spacedata)[which(names(spacedata)=="pCount_lower")]<-paste0("p",streamvast$countname,"_lower")
+  names(spacedata)[which(names(spacedata)=="tpCount_upper")]<-paste0("p",streamvast$countname,"_upper")
+  names(spacedata)[which(names(spacedata)=="tCount")]<-paste0("t",streamvast$countname)
+  names(spacedata)[which(names(spacedata)=="tCount_lower")]<-paste0("t",streamvast$countname,"_lower")
+  names(spacedata)[which(names(spacedata)=="tCount_upper")]<-paste0("t",streamvast$countname,"_upper")
+
+  # Next, we'll do time
+  for(i in 1:nrow(timedata)){
+
+    active.time<-timedata$Time[i]
+    active.rows<-which(obs.data$Time==active.time)
+
+    t.data<-pred.sim[,1,i,]
+    t.data.count<-t.data*habitat.reaches$Length
+    t.obs.data<-obs.data[active.rows,]
+
+    if(nrow(t.obs.data)>0){
+      timedata$Density[i]<-mean(t.obs.data$Density)
+      timedata$Count[i]<-mean(t.obs.data[,streamvast$countname])
+    }else{
+      timedata$Density[i]<-NA
+      timedata$Count[i]<-NA
+    }
+
+    if(length(active.rows)>0){
+      t.obs.sim.data<-matrix(obs.sim.data[active.rows,],nrow=length(active.rows),ncol=100)
+      t.obs.data.density<-t.obs.sim.data/obs.data$Effort[active.rows]
+
+      timedata$pCount[i]<-mean(obs.D_i[active.rows])
+      timedata$pCount_lower[i]<-stats::quantile(apply(t.obs.sim.data,MARGIN=2,FUN=mean),prob=.05,na.rm=T)
+      timedata$pCount_upper[i]<-stats::quantile(apply(t.obs.sim.data,MARGIN=2,FUN=mean),prob=.95,na.rm=T)
+
+      timedata$pDensity[i]<-mean(obs.D_i[active.rows]/obs.data$Effort[active.rows])
+      timedata$pDensity_lower[i]<-stats::quantile(apply(t.obs.data.density,MARGIN=2,FUN=mean),prob=.05,na.rm=T)
+      timedata$pDensity_upper[i]<-stats::quantile(apply(t.obs.data.density,MARGIN=2,FUN=mean),prob=.95,na.rm=T)
+    }
+
+    timedata$tDensity[i]<-mean(streamvast$vastmodel$Report$D_gct[,1,i])
+    timedata$tDensity_lower[i]<-quantile(apply(t.data,MARGIN=2,FUN=mean),prob=.05,na.rm=T)
+    timedata$tDensity_upper[i]<-quantile(apply(t.data,MARGIN=2,FUN=mean),prob=.95,na.rm=T)
+
+    timedata$tCount[i]<-as.numeric(mean(streamvast$vastmodel$Report$D_gct[,1,i]*habitat.reaches$Length))
+    timedata$tCount_lower[i]<-quantile(apply(t.data.count,MARGIN=2,FUN=mean),prob=.05,na.rm=T)
+    timedata$tCount_upper[i]<-quantile(apply(t.data.count,MARGIN=2,FUN=mean),prob=.95,na.rm=T)
+  }
+
+  names(timedata)[names(timedata)=="Count"]<-streamvast$countname
+  names(timedata)[names(timedata)=="pCount"]<-paste0("p",streamvast$countname)
+  names(timedata)[names(timedata)=="pCount_lower"]<-paste0("p",streamvast$countname,"_lower")
+  names(timedata)[names(timedata)=="pCount_upper"]<-paste0("p",streamvast$countname,"_upper")
+  names(timedata)[names(timedata)=="tCount"]<-paste0("t",streamvast$countname)
+  names(timedata)[names(timedata)=="tCount_lower"]<-paste0("t",streamvast$countname,"_lower")
+  names(timedata)[names(timedata)=="tCount_upper"]<-paste0("t",streamvast$countname,"_upper")
+
+  #Start filling the aucdata in here, which will require another loop
+  for(y in 1:length(unique(streamvast$timetable$Year))){
+
+    active.year<-sort(unique(streamvast$timetable$Year))[y]
+    active.times<-streamvast$timetable$Time[streamvast$timetable$Year==active.year]
+    day.vec<-streamvast$timetable$Day[streamvast$timetable$Time%in%active.times]
+    active.rows<-which(obs.data$Time%in%active.times)
+
+    year.total.sim<-matrix(nrow=nrow(habitat.reaches),ncol=100)
+    year.total.sim.obs<-matrix(nrow=nrow(habitat.reaches),ncol=100)
+
+    for(r in 1:nrow(habitat.reaches)){
+
+      index<-which(aucdata$Year==active.year & aucdata$Reach==as.data.frame(habitat.reaches)[r,streamvast$reachname])
+      active.id<-habitat.reaches$vastid[r]
+      active.area<-habitat.reaches$Length[r]
+
+      # Remember that pred.sim comes from D_gct and is a density; don't forget to multiple by length
+      # Whereas obs.sim.data comes from D_i and is a count; no multiplication needed
+      reach.preds<-streamvast$vastmodel$Report$D_gct[r,1,active.times]*active.area
+      reach.obs<-obs.data[obs.data$Time%in%active.times & obs.data$vastid==active.id,]
+      reach.obs.preds<-obs.D_i[obs.data$Time%in%active.times & obs.data$vastid==active.id]
+
+      year.sim<-pred.sim[r,1,active.times,]*active.area
+      year.obs.sim<-obs.sim.data[obs.data$Time%in%active.times & obs.data$vastid==active.id,]
+
+      aucdata$AUC[index]<-MESS::auc(x = reach.obs$Day,y = reach.obs[,streamvast$countname])
+      aucdata$pAUC[index]<-MESS::auc(x= reach.obs$Day,y=reach.obs.preds)
+      aucdata$tAUC[index]<-MESS::auc(x = day.vec,y = reach.preds)
+
+      year.aucs<-apply(year.sim,MARGIN = 2,FUN = function(y){return(MESS::auc(x=day.vec,y=y))})
+      year.obs.aucs<-apply(year.obs.sim,MARGIN = 2,FUN = function(y){return(MESS::auc(x=reach.obs$Day,y=y))})
+
+      aucdata$pAUC_lower[index]<-quantile(year.obs.aucs,probs = .05,na.rm=T)
+      aucdata$pAUC_upper[index]<-quantile(year.obs.aucs,probs = .95,na.rm=T)
+      aucdata$tAUC_lower[index]<-quantile(year.aucs,probs = .05,na.rm=T)
+      aucdata$tAUC_upper[index]<-quantile(year.aucs,probs = .95,na.rm=T)
+
+      year.total.sim[r,]<-year.aucs
+      year.total.sim.obs[r,]<-year.obs.aucs
+    }
+    auctotals$AUC[y]<-sum(aucdata$AUC[aucdata$Year==active.year])
+    auctotals$pAUC[y]<-sum(aucdata$pAUC[aucdata$Year==active.year])
+    auctotals$tAUC[y]<-sum(aucdata$tAUC[aucdata$Year==active.year])
+
+    auctotals$pAUC_lower[y]<-quantile(apply(year.total.sim.obs,MARGIN = 2,FUN = sum),probs=.05,na.rm=T)
+    auctotals$pAUC_upper[y]<-quantile(apply(year.total.sim.obs,MARGIN = 2,FUN = sum),probs=.95,na.rm=T)
+    auctotals$tAUC_lower[y]<-quantile(apply(year.total.sim,MARGIN = 2,FUN = sum),probs=.05,na.rm=T)
+    auctotals$tAUC_upper[y]<-quantile(apply(year.total.sim,MARGIN = 2,FUN = sum),probs=.95,na.rm=T)
+  }
+
+  streamvast$preds<-preddata
+  streamvast$eval<-evaldata
+  streamvast$spacedata<-spacedata
+  streamvast$timedata<-timedata
+  streamvast$aucdata<-list(aucdata=aucdata,auctotals=auctotals)
+  return(streamvast)
+}
+
+
+#' Get predictions matched to observations from a vast model. Fills in the evaluation data set, and adds some columns
+#' to the other slots.
+#'
+#' @param streamvast A VAST model object
+#'
+#' @return A streamvast object with an evaluation data set included
+#' @export
+#'
+#' @examples
+VASTeval<-function(streamvast){
+
+  if(length(streamvast$eval)>0){warning("Evaluation data already found. Overwriting pre-existing data.")}
+  sim.data<-FishStatsUtils::sample_variable(Sdreport=streamvast$vastmodel$parameter_estimates$SD,
+                                            Obj=streamvast$vastmodel$tmb_list$Obj,variable_name="D_i",n_samples = 100)
+  obs.sim.data<-sim.data[streamvast$vastdata$dummy==F,]
+  obs.data<-subset(streamvast$vastdata,dummy==F)
+  obs.D_i<-streamvast$vastmodel$Report$D_i[streamvast$vastdata$dummy==F]
+
+  out.data<-data.frame(Time=obs.data$Time,
+                       Reach=obs.data[,streamvast$reachname],
+                       Year=obs.data$Year,
+                       Month=obs.data$Month,
+                       Day=obs.data$Day,
+                       Count=obs.data[,streamvast$countname],
+                       Density=obs.data$Density,
+                       Effort=obs.data$Effort,
+                       pCount=obs.D_i,
+                       pCount_upper=apply(obs.sim.data,MARGIN = 1,FUN=stats::quantile,probs=.95),
+                       pCount_lower=apply(obs.sim.data,MARGIN = 1,FUN=stats::quantile,probs=.05),
+                       pDensity=obs.D_i/obs.data$Effort,
+                       pDensity_upper=apply(obs.sim.data/obs.data$Effort,MARGIN = 1,FUN=stats::quantile,probs=.95),
+                       pDensity_lower=apply(obs.sim.data/obs.data$Effort,MARGIN = 1,FUN=stats::quantile,probs=.05),
+                       Residual_count=NA,
+                       Residual_density=NA,
+                       Residual_pearson=NA,
+                       Residual_dharma=NA)
+
+  streamvast$stats$rho<-stats::cor(out.data[6],out.data[9],method = "spearman")
+  streamvast$stats$RMSE<-sqrt(sum((out.data[6]-out.data[9])^2)/nrow(out.data))
+
+  #Seems like a good place to do the residuals
+  # note that due to capability issues,  dHARMa requires the vast model to be stored in an object called "fit" in
+  # .GlobalEnv. Therefore, we do some back end work to make sure we don't overwrite the user's data
+  # first we save a backup using a string that is unlikely to be there, then return the original from the backup
+  had.fit<-F
+  if(exists("fit")){
+    name.nobody_would.ever_use<-fit
+    had.fit<-T
+  }
+  fit<<-streamvast$vastmodel
+  dharmaRes <-summary(streamvast$vastmodel, what="residuals", type=1)
+  par(mfrow=c(1,1))
+  rm(fit,envir = .GlobalEnv)
+  if(had.fit){fit<<-name.nobody_would.ever_use}
+
+  out.data$Residual_count<-out.data$Count-out.data$pCount
+  out.data$Residual_density<-out.data$Density-out.data$pDensity
+  out.data$Residual_pearson<-(out.data$Density-out.data$pDensity)/sqrt(out.data$pDensity)
+  out.data$Residual_dharma<-dharmaRes$scaledResiduals[streamvast$vastdata$dummy==F]
+
+  names(out.data)[6]<-streamvast$countname
+  names(out.data)[9]<-paste0("p",streamvast$countname)
+  names(out.data)[10]<-paste0("p",streamvast$countname,"_upper")
+  names(out.data)[11]<-paste0("p",streamvast$countname,"_lower")
+  names(out.data)[15]<-paste0("Residual",streamvast$countname)
+
+  # This is a good time to fill in the columns in spacedata and timedata
+  # space first
+  for(i in 1:nrow(streamvast$spacedata)){
+    active.reach<-streamvast$spacedata[i,reachname]
+    active.rows<-which(obs.data[,streamvast$reachname]==active.reach)
+
+    if(streamvast$spacedata$Habitat[i]==1 & length(active.rows)>0){
+      r.data<-matrix(obs.sim.data[active.rows,],nrow=length(active.rows),ncol=100)
+      r.data.density<-r.data/obs.data$Effort[active.rows]
+
+      streamvast$spacedata$pCount[i]<-mean(obs.D_i[active.rows])
+      streamvast$spacedata$pCount_lower[i]<-stats::quantile(apply(r.data,MARGIN=2,FUN=mean),prob=.05)
+      streamvast$spacedata$pCount_upper[i]<-stats::quantile(apply(r.data,MARGIN=2,FUN=mean),prob=.95)
+
+      streamvast$spacedata$pDensity[i]<-mean(obs.D_i[active.rows]/obs.data$Effort[active.rows])
+      streamvast$spacedata$pDensity_lower[i]<-stats::quantile(apply(r.data.density,MARGIN=2,FUN=mean),prob=.05)
+      streamvast$spacedata$pDensity_upper[i]<-stats::quantile(apply(r.data.density,MARGIN=2,FUN=mean),prob=.95)
+    }
+  }
+
+  #Time second
+  for(i in 1:nrow(streamvast$timedata)){
+    active.time<-streamvast$timedata$Time[i]
+    active.rows<-which(obs.data$Time==active.time)
+
+    if(length(active.rows)>0){
+      t.data<-matrix(obs.sim.data[active.rows,],nrow=length(active.rows),ncol=100)
+      t.data.density<-t.data/obs.data$Effort[active.rows]
+
+      streamvast$timedata$pCount[i]<-mean(obs.D_i[active.rows])
+      streamvast$timedata$pCount_lower[i]<-stats::quantile(apply(t.data,MARGIN=2,FUN=mean),prob=.05)
+      streamvast$timedata$pCount_upper[i]<-stats::quantile(apply(t.data,MARGIN=2,FUN=mean),prob=.95)
+
+      streamvast$timedata$pDensity[i]<-mean(obs.D_i[active.rows]/obs.data$Effort[active.rows])
+      streamvast$timedata$pDensity_lower[i]<-stats::quantile(apply(t.data.density,MARGIN=2,FUN=mean),prob=.05)
+      streamvast$timedata$pDensity_upper[i]<-stats::quantile(apply(t.data.density,MARGIN=2,FUN=mean),prob=.95)
+    }
+  }
+  streamvast$eval<-out.data
+  return(streamvast)
+}
+
+
+
+#' Makes a line plot that shows tributaries by stream distance
+#'
+#' @param streamvast a streamvast object with predictions or evaluations
+#' @param plotvar the column name in data to be plotted
+#' @param streamname the column name in the reaches with the stream name
+#' @param usepreds logical, should the prediction or evaluation data be used, if absent, the function will search
+#' @param main the name of the mainstem or most important stream, which will be highlighted
+#'
+#' @return A plot of the variable with respect ot stream distance
+#' @export
+#'
+#' @examples
+plotStream<-function(streamvast,plotvar,streamname,usepreds,main=NA){
+
+  if(missing(plotvar)){plotvar<-streamvast$countname}
+
+  if(missing(usepreds)){
+    in.preds<-plotvar%in%names(streamvast$preds)
+    in.eval<-plotvar%in%names(streamvast$eval)
+
+    if(in.preds & in.eval==F){usepreds<-T}
+    if(in.preds & in.eval){
+      usepreds<-T
+      warnings(paste0("Column ",plotvar," found in both prediction and evaluation data. Defaulting to prediction data.
+                      Specify 'usepreds=F' to use evaluation data instead."))
+    }
+    if(in.preds==F & in.eval){usepreds<-F}
+    if(in.preds==F & in.eval==F){stop(paste0("Could not find ",plotvar," in either prediction or evaluation data"))}
+  }
+
+  if(usepreds){
+    vardata<-streamvast$preds
+  }else{
+    vardata<-streamvast$eval
+  }
+
+  reachdata<-as.data.frame(streamvast$reachdata)
+
+  pointdata<-stats::aggregate(vardata[,plotvar],by=list(Reach=vardata[,streamvast$reachname]),FUN=mean)
+  pointdata$streamdist<-reachdata$streamdist[match(pointdata$Reach,reachdata[,streamvast$reachname])]
+  pointdata$name<-reachdata[match(pointdata$Reach,reachdata[,streamvast$reachname]),streamname]
+  names(pointdata)[2]<-"Density"
+
+  parent.table<-data.frame(stream=unique(reachdata[,streamname]),
+                           parent=as.integer(sapply(unique(reachdata[,streamname]),
+                                                    FUN=function(x){min(reachdata$parent[reachdata[,streamname]==x])})))
+
+  joiners<-data.frame(Reach=parent.table$parent,
+                      Density=pointdata$Density[match(parent.table$parent,pointdata$Reach)],
+                      streamdist=pointdata$streamdist[match(parent.table$parent,pointdata$Reach)],
+                      name=parent.table$stream)
+
+  linedata<-rbind(pointdata,stats::na.omit(joiners))
+
+  if(any(is.na(main))==F){
+    pointdata$main<-pointdata$name%in%main
+    linedata$main<-linedata$name%in%main
+
+    outplot<-ggplot2::ggplot()+
+      ggplot2::geom_point(data=pointdata,ggplot2::aes(x=streamdist,y=Density,col=name,size=main),shape=16)+
+      ggplot2::geom_line(data=linedata,ggplot2::aes(x=streamdist,y=Density,col=name,group=name,lwd=main))+
+      ggplot2::scale_size_manual(values=c(1.5,3),guide="none")+
+      ggplot2::scale_linewidth_manual(values=c(1,1.6),guide="none")+
+      ggplot2::theme_bw()+ggplot2::theme(legend.title = ggplot2::element_blank())+
+      ggplot2::xlab("Stream Distance (km)")+ggplot2::ylab(plotvar)+ggplot2::ggtitle(main)
+    outplot
+
+  }else{
+    outplot<-ggplot2::ggplot()+
+      ggplot2::geom_point(data=pointdata,ggplot2::aes(x=streamdist,y=Density,col=name),shape=16)+
+      ggplot2::geom_line(data=linedata,ggplot2::aes(x=streamdist,y=Density,col=name,group=name))+
+      ggplot2::theme_bw()+ggplot2::theme(legend.title = ggplot2::element_blank())+
+      ggplot2::xlab("Stream Distance (km)")+ggplot2::ylab(plotvar)
+  }
+  return(outplot)
 }
 
 
 #' Maps, the desired data, with options for facetting
 #'
-#' @param data a data frame with predictions and any grouping data
+#' @param streamvast a streamvast object with a prediction data frame
 #' @param mapvar the column in data to map
-#' @param reaches an sf object with reach data
 #' @param facet a column to determine the facets, or a vector of values
-#' @param reach.names the column in reaches that holds the id numbers
+#' @param background a sf object to put in the background
+#' @param subset a logical vector indicating which pred values to use
 #' @param make.labels should the reaches be labelled, turn off for multiple years
 #' @param xaxis.breaks Vector of x values for axis lines; useful to reduce crowding
 #' @param yaxis.breaks Vector of y values for axis lines; useful to reduce crowding
@@ -426,8 +1199,10 @@ MakeVASTData<-function(data, reachdata,unit.conv=1, countname="Redds",
 #' @export
 #'
 #' @examples
-plotPredictionMap<-function(data, mapvar="preds", reaches,facet=NA,reach.names="reachid",
-                            make.labels=T,xaxis.breaks=NA, yaxis.breaks=NA,palette="turbo"){
+plotPredictionMap<-function(streamvast,mapvar="Density",facet=NA,FUN="mean",background,subset,
+                            make.labels=F,xaxis.breaks=NA, yaxis.breaks=NA,palette="turbo"){
+
+  if(missing(subset)){subset<-rep(T,nrow(streamvast$preds))}
 
   if(is.na(facet)==F){
     facet.name<-"group"
@@ -436,34 +1211,32 @@ plotPredictionMap<-function(data, mapvar="preds", reaches,facet=NA,reach.names="
       if(is.character(facet)){
         facet.name<-facet
       }
-      datareach<-stats::aggregate(data[,mapvar],by=list(Reach=data$Reach,data[,facet]),FUN=mean)
-    }
-    if(length(facet)==nrow(data)){
-      datareach<-stats::aggregate(data[,mapvar],by=list(Reach=data$Reach,facet),FUN=mean)
-    }
+      datareach<-stats::aggregate(streamvast$preds[subset,mapvar],by=list(Reach=streamvast$preds[subset,streamvast$reachname],
+                                                                    streamvast$preds[subset,facet]),FUN=FUN)
+      }
     names(datareach)[2]<-facet.name
-    facet.vec<-rep(sort(unique(datareach[,facet])),each=nrow(reaches))
+    facet.vec<-rep(sort(unique(datareach[,facet])),each=nrow(streamvast$reachdata))
   }else{
-    datareach<-stats::aggregate(data[,mapvar],by=list(Reach=data$Reach),FUN=mean)
+    datareach<-stats::aggregate(streamvast$preds[subset,mapvar],by=list(Reach=streamvast$preds[subset,streamvast$reachname]),FUN=FUN)
     facet.vec<-NA
     facet.name<-"group"
   }
 
   # add labels, gets rather complicated
   if(make.labels){
+    midpoints<-as.data.frame(sf::st_coordinates(sf::st_transform(sf::st_line_sample(x=streamvast$reachdata,sample = .5),
+                                                                 crs = sf::st_crs(streamvast$reachdata))))[,1:2]
+    midpoints$Reach<-as.data.frame(streamvast$reachdata)[,streamvast$reachname]
+    midpoints.sf<-sf::st_as_sf(midpoints,coords=1:2,crs=sf::st_crs(streamvast$reachdata))
 
-    midpoints<-as.data.frame(sf::st_coordinates(sf::st_transform(sf::st_line_sample(x=reaches,sample = .5),crs = sf::st_crs(reaches))))[,1:2]
-    midpoints$Reach<-reaches[reach.names]
-    midpoints.sf<-sf::st_as_sf(midpoints,coords=1:2,crs=sf::st_crs(reaches))
-
-    labeldat<-data.frame(X=rep(NA,nrow(reaches)),Y=NA,labels=reaches$reachid)
-    meanlength<-mean(sf::st_length(reaches))
-    distmat<-sf::st_distance(reaches)
-    for(i in 1:nrow(reaches)){
+    labeldat<-data.frame(X=rep(NA,nrow(streamvast$reachdata)),Y=NA,labels=as.data.frame(streamvast$reachdata)[,streamvast$reachname])
+    meanlength<-mean(sf::st_length(streamvast$reachdata))
+    distmat<-sf::st_distance(streamvast$reachdata)
+    for(i in 1:nrow(streamvast$reachdata)){
 
       #grab all nearby features, combine to a multi-line, compute the buffer, and pick a point on the buffer
       nearby<-which(distmat[i,]<meanlength*1.5)
-      nearby.line<-sf::st_as_sf(sf::st_combine(reaches[nearby,]))
+      nearby.line<-sf::st_as_sf(sf::st_combine(streamvast$reachdata[nearby,]))
 
       buf<-sf::st_cast(sf::st_buffer(nearby.line,dist=meanlength/2),"LINESTRING")
       nearest.point<-sf::st_as_sf(sf::st_nearest_points(y = midpoints.sf[i,],x=buf))
@@ -474,33 +1247,51 @@ plotPredictionMap<-function(data, mapvar="preds", reaches,facet=NA,reach.names="
   }
 
   # Set up the ggplot data
-  reachplot<-sf::st_as_sf(rep(reaches$geometry,times=length(facet.vec)))
-  reachplot$reach<-rep(reaches$reachid,times=length(facet.vec))
+  reachplot<-sf::st_as_sf(rep(sf::st_geometry(streamvast$reachdata),times=length(facet.vec)))
+  reachplot$reach<-rep(as.data.frame(streamvast$reachdata)[,streamvast$reachname],times=length(facet.vec))
+  reachplot$vastid<-streamvast$reachdata$vastid
+  reachplot$habitat<-streamvast$reachdata$habitat
   reachplot$group<-facet.vec
   reachplot$preds<-NA
   for(i in 1:nrow(reachplot)){
-    if(length(facet.vec)>1){
-      reachplot$preds[i]<-datareach$x[datareach$Reach==reachplot$reach[i] &
-                                        datareach[,facet.name]==reachplot$group[i]]
-    }else{
-      reachplot$preds[i]<-datareach$x[datareach$Reach==reachplot$reach[i]]
+    if(reachplot$habitat[i]==T){
+      if(length(facet.vec)>1){
+        reachplot$preds[i]<-datareach$x[datareach$Reach==reachplot$reach[i] &
+                                          datareach[,facet.name]==reachplot$group[i]]
+      }else{
+        reachplot$preds[i]<-datareach$x[datareach$Reach==reachplot$reach[i]]
+      }
     }
   }
-
   bounds<-sf::st_bbox(sf::st_transform(reachplot,crs = "wgs84"))
 
-  map<-ggplot2::ggplot()+
-    ggplot2::geom_sf(data=reachplot,lwd=3)+
-    ggplot2::geom_sf(data=reachplot,ggplot2::aes(col=preds),lwd=2)+ggplot2::theme_bw()+
-    viridis::scale_color_viridis(option = palette,name=mapvar)
+  FUN.name<-mapvar
+  if(FUN=="mean"){FUN.name<-paste0("Mean ",mapvar)}
+  if(FUN=="var"){FUN.name<-paste0(mapvar, " Variance")}
+
+  if(missing(background)){
+    map<-ggplot2::ggplot()
+  }else{
+    map<-ggplot2::ggplot()+
+      ggplot2::geom_sf(data=background,col="gray50",alpha=.5)
+  }
+
+  map<-map+
+    ggplot2::geom_sf(data=reachplot,lwd=2)+
+    ggplot2::geom_sf(data=reachplot,ggplot2::aes(col=preds),lwd=1.25)+ggplot2::theme_bw()+
+    viridis::scale_color_viridis(option = palette,name=FUN.name,na.value="grey75")
   if(length(facet.vec)>1){
     map<-map+ggplot2::facet_wrap(~group)
   }
   if(is.na(xaxis.breaks[1])==F){
-    map<-map+ggplot2::scale_x_continuous(breaks = xaxis.breaks)
+    map<-map+ggplot2::scale_x_continuous(breaks = xaxis.breaks,limits = sf::st_bbox(reachplot)[c(1,3)])
+  }else{
+    map<-map+ggplot2::scale_x_continuous(limits = sf::st_bbox(reachplot)[c(1,3)])
   }
   if(is.na(yaxis.breaks[1])==F){
-    map<-map+ggplot2::scale_y_continuous(breaks = yaxis.breaks)
+    map<-map+ggplot2::scale_y_continuous(breaks = yaxis.breaks,limits = sf::st_bbox(reachplot)[c(2,4)])
+  }else{
+    map<-map+ggplot2::scale_y_continuous(limits = sf::st_bbox(reachplot)[c(2,4)])
   }
   if(make.labels){
     map<-map+ggplot2::geom_text(data=labeldat,ggplot2::aes(x=X,y=Y,label=labels),check_overlap = T)
@@ -509,82 +1300,4 @@ plotPredictionMap<-function(data, mapvar="preds", reaches,facet=NA,reach.names="
 }
 
 
-#' Makes a line plot that shows tributaries by stream distance
-#'
-#' @param data a data frame with a variable to plot matched to reach
-#' @param plotvar the column name in data to be plotted
-#' @param reaches a sf object containing the reach data
-#' @param streamdist name of a column in reaches with stream distance
-#' @param rnames name or id of reaches
-#' @param main the name of the mainstem or most important stream, which will be highlighted
-#'
-#' @return A plot of the variable with respect ot stream distance
-#' @export
-#'
-#' @examples
-plotStream<-function(data,plotvar,streamdist="streamdist",rnames="STRM_NA",reaches,main=NA){
 
-  pointdata<-stats::aggregate(data[,plotvar],by=list(Reach=preds$Reach),FUN=mean)
-  pointdata$streamdist<-as.data.frame(reaches)$streamdist[match(pointdata$Reach,reaches$reachid)]
-  pointdata$name<-as.data.frame(reaches)[match(pointdata$Reach,reaches$reachid),rnames]
-  names(pointdata)[2]<-"Density"
-
-  parent.table<-data.frame(stream=unique(reaches$STRM_NA),
-                           parent=as.integer(sapply(unique(reaches$STRM_NA),
-                                                    FUN=function(x){min(reaches$parent[reaches$STRM_NA==x])})))
-
-  joiners<-data.frame(Reach=parent.table$parent,
-                      Density=pointdata$Density[match(parent.table$parent,pointdata$Reach)],
-                      streamdist=pointdata$streamdist[match(parent.table$parent,pointdata$Reach)],
-                      name=parent.table$stream)
-
-  linedata<-rbind(pointdata,stats::na.omit(joiners))
-
-  if(is.na(main)==F){
-    pointdata$main<-pointdata$name==main
-    linedata$main<-linedata$name==main
-
-    outplot<-ggplot2::ggplot()+
-      ggplot2::geom_point(data=pointdata,ggplot2::aes(x=streamdist,y=Density,col=name,size=main),shape=16)+
-      ggplot2::geom_line(data=linedata,ggplot2::aes(x=streamdist,y=Density,col=name,group=name,lwd=main))+
-      ggplot2::scale_size_manual(values=c(1.5,3),guide="none")+
-      ggplot2::scale_linewidth_manual(values=c(1,1.6),guide="none")+
-      ggplot2::theme_bw()+ggplot2::theme(legend.title = ggplot2::element_blank())+
-      ggplot2::xlab("Stream Distance (km)")+ggplot2::ggtitle(main)
-    outplot
-
-  }else{
-    outplot<-ggplot2::ggplot()+
-      ggplot2::geom_point(data=pointdata,ggplot2::aes(x=streamdist,y=Density,col=name),shape=16)+
-      ggplot2::geom_line(data=linedata,ggplot2::aes(x=streamdist,y=Density,col=name,group=name))+
-      ggplot2::theme_bw()+ggplot2::theme(legend.title = ggplot2::element_blank())+
-      ggplot2::xlab("Stream Distance (km)")
-  }
-
-  return(outplot)
-}
-
-
-#' Assemble estimates of total population index by time
-#'
-#' @param model A fitted VAST model
-#' @param eval A dataframe produced by VASTeval
-#'
-#' @return A data frame with the population index and CIs
-#' @export
-#'
-#' @examples
-VASTtotals<-function(model,eval){
-
-  out.data<-stats::aggregate(eval[,"Redds"],by=list(Time=eval$Time),FUN=sum)
-  names(out.data)[2]<-"Redds"
-
-  sim.data<-FishStatsUtils::sample_variable(Sdreport=model$parameter_estimates$SD,Obj=model$tmb_list$Obj,
-                                            variable_name="Index_ctl",n_samples = 100)
-
-  out.data$pRedds<-as.numeric(model$Report$Index_ctl[1,out.data$Time,1])
-  out.data$pRedds_lower<-apply(sim.data[1,out.data$Time,1,],MARGIN = 1,FUN=stats::quantile,probs = .05)
-  out.data$pRedds_upper<-apply(sim.data[1,out.data$Time,1,],MARGIN = 1,FUN=stats::quantile,probs = .95)
-
-  return(out.data)
-}
