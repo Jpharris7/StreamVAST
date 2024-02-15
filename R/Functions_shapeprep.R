@@ -107,7 +107,7 @@ FindRoots<-function(shape,mainstem=NA){
 #' @examples
 Makesfnetwork<-function(shape,attach.data=T){
 
-  shape.net0<-sfnetworks::as_sfnetwork(sf::st_as_sf(shape))
+  shape.net0<-sfnetworks::as_sfnetwork(sf::st_as_sf(shape),)
 
   connect.check<-sfnetworks::st_network_cost(shape.net0,1,direction="all")[1,]
   if(any(is.infinite(connect.check))){
@@ -306,9 +306,9 @@ LocateFeature<-function(shape,type){
   still.going<-T
   while(still.going){
     # start by plotting the network and show any updates
-    plot(sf::st_geometry(shape.edges2),xlim=c(midpoint[1]-xspan/2,midpoint[1]+xspan/2),
+    plot(sf::st_geometry(shape.edges),xlim=c(midpoint[1]-xspan/2,midpoint[1]+xspan/2),
          ylim=c(midpoint[2]-yspan/2,midpoint[2]+yspan/2),pch=16)
-    plot(sf::st_geometry(shape.nodes2),pch=16,add=T,col=1)
+    plot(sf::st_geometry(shape.nodes),pch=16,add=T,col=1)
     plot(sf::st_geometry(out.sf),add=T,col=4,pch=16,cex=1.25,lwd=1.25)
 
     # user chooses an action
@@ -320,6 +320,9 @@ LocateFeature<-function(shape,type){
     if(toupper(response)%in%c("F","FIN","FI","FINISH")){resp<-"FINISH"}
     if(toupper(response)%in%c("I","IN","ZOOMIN")){resp<-"IN"}
     if(toupper(response)%in%c("O","OUT","ZOOMOUT")){resp<-"OUT"}
+
+    # should consider adding code to handle typos without an error
+
 
     # if finished, flag to not repeat the loop
     if(resp=="FINISH"){still.going<-F}
@@ -546,7 +549,7 @@ EditFeatures<-function(shape,root){
       if(type=="SEGMENT"){
         pick.index<-sf::st_nearest_feature(user.sf,temp.edges)
 
-        temp.net0<-sfnetworks::as_sfnetwork(temp.edges[-pick.index,])
+        temp.net0<-sfnetworks::as_sfnetwork(temp.edges[-pick.index,-c(1:2)])
         if(has.root){
 
           temp.nodes0<-sf::st_as_sf(sfnetworks::activate(temp.net0,"nodes"))
@@ -558,7 +561,7 @@ EditFeatures<-function(shape,root){
           if(length(bad.nodes.index)>0){plot(sf::st_geometry(temp.nodes[bad.nodes.index,]),add=T,col=6,pch=16)}
           if(length(bad.edges.index)>0){
             plot(sf::st_geometry(temp.edges0[bad.edges.index,]),add=T,lwd=2,col=6)
-            temp.net0<-sfnetworks::as_sfnetwork(temp.edges0[-bad.edges.index,])
+            temp.net0<-sfnetworks::as_sfnetwork(temp.edges0[-bad.edges.index,-c(1:2)])
             temp.edges0<-sf::st_as_sf(sfnetworks::activate(temp.net0,"edges"))
             temp.nodes0<-sf::st_as_sf(sfnetworks::activate(temp.net0,"nodes"))
           }
@@ -707,6 +710,9 @@ AddFeatures<-function(network,nodes,edges,crs,tolerance=200,tolerance2=10){
 #' leftover after other operations
 #'
 #' @param network A sfnetwork
+#' @param root an optional sf POINT or other input capatible with RootNetwork; useful if the root gets removed
+#' @param preserve an optional input that specifies nodes or segments that should not be altered
+#' @param preserve.type either "nodes" or "edges", indicating which component preserve is referencing
 #' @param tolerance A integer, segments with no connections below this size are removed
 #' @param tolerance2 A fine scale tolerance for resolving overlapping edges; ought to be small
 #' @param makeplot should the funciton output a plot showing before/after versions of the network
@@ -715,10 +721,59 @@ AddFeatures<-function(network,nodes,edges,crs,tolerance=200,tolerance2=10){
 #' @export
 #'
 #' @examples
-SimplifyNetwork<-function(network,tolerance=1000,tolerance2=1,makeplot=T){
+SimplifyNetwork<-function(network,root,preserve,preserve.type,tolerance=1000,tolerance2=1,makeplot=T){
+
+  old.edges<-sf::st_as_sf(sfnetworks::activate(network,"edges"))
+  old.nodes<-sf::st_as_sf(sfnetworks::activate(network,"nodes"))
+
+  #set aside nodes to preserve here, and blend them back in later
+  if(missing(preserve)==F){
+
+    # start with some checks
+    preserve.class<-class(preserve)
+
+    if(preserve.class=="logical"){
+      if(missing(preserve.type)){
+        if(length(preserve)==nrow(old.edges)){preserve.type<-"edges"}
+        if(length(preserve)==nrow(old.nodes)){preserve.type<-"nodes"}
+        if(length(preserve)%in%c(nrow(old.edges),nrow(old.nodes))==F){stop("Vector 'preserve' is wrong length")}
+        if(nrow(old.edges)==nrow(old.nodes)){stop("Please specify 'preserve.type'.")}
+      }
+      if(preserve.type%in%c("nodes","edges")==F){stop("'preserve.type' must be either 'nodes' or 'edges'")}
+      if(preserve.type=="nodes"){reserve.nodes<-old.nodes[which(preserve),]}
+      if(preserve.type=="edges"){
+        reserve.edges<-old.edges[which(preserve),]
+        reserve.nodes<-old.nodes[sort(unique(c(reserve.edges$to,reserve.edges$from))),]
+      }
+    }
+    if(preserve.class%in%c("numeric","integer")){
+      if(missing(preserve.type)){
+        warning("No input for preserve.type! Defaulting to 'edges'!")
+        preserve.type<-"edges"
+      }
+      if(preserve.type=="nodes"){reserve.nodes<-old.nodes[preserve,]}
+      if(preserve.type=="edges"){
+        reserve.edges<-old.edges[preserve,]
+        reserve.nodes<-old.nodes[sort(unique(c(reserve.edges$to,reserve.edges$from))),]
+      }
+    }
+    if(preserve.class=="character"){
+      col.matches<-apply(as.data.frame(old.edges),MARGIN = 2,FUN = function(x){return(sum(preserve%in%x))})
+      b.col<-which.max(col.matches)
+      if(length(preserve)>max(col.matches)){
+        nomatch<-which(preserve%in%as.data.frame(shape)[,b.col]==F)
+        warning("Could not find '",preserve[nomatch],"' using best column '",names(shape)[b.col],"'")
+
+      }
+      reserve.edges<-old.edges[which(as.data.frame(old.edges)[,b.col]%in%preserve),]
+      reserve.nodes<-old.nodes[sort(unique(c(reserve.edges$to,reserve.edges$from))),]
+    }
+  }else{
+    reserve.nodes<-old.nodes[0,]
+  }
+
 
   # first simplify by combining segments
-  old.edges<-sf::st_as_sf(sfnetworks::activate(network,"edges"))
   new.edges<-sf::st_as_sf(sf::st_cast(sf::st_line_merge(sf::st_combine(old.edges)),"LINESTRING"))
 
   # but there may still be overlapping lines
@@ -774,6 +829,14 @@ SimplifyNetwork<-function(network,tolerance=1000,tolerance2=1,makeplot=T){
   new.edges2<-sf::st_as_sf(sf::st_cast(sf::st_line_merge(sf::st_combine(new.network.edges2)),"LINESTRING"))
   out.network<-sfnetworks::as_sfnetwork(new.edges2)
 
+  if(nrow(reserve.nodes)>0){
+    out.network<-sfnetworks::st_network_blend(x = out.network,y = reserve.nodes)
+  }
+
+  if(missing(root)==F){
+    out.network<-RootNetwork(network = out.network,root = root,tolerance = 0)
+  }
+
   # plot it out
   if(makeplot){
     out.edges<-sf::st_as_sf(sfnetworks::activate(out.network,"edges"))
@@ -794,17 +857,20 @@ SimplifyNetwork<-function(network,tolerance=1000,tolerance2=1,makeplot=T){
 #'
 #' @param shape an sf object consisting of linestrings (not multilinestrings!)
 #' @param root a sf point, or length 2 vector with xy coordinates
-#' @param basin a name or sf feature indicating the basin to be extracted
+#' @param basins a vector of names or sf feature indicating the basin to be extracted
 #' @param exclude vector indexes to be dropped, will attempt to match a single name
+#' @param extract.inner logical; should nodes that are in between the basins and the root be extracted
 #'
-#' @return A sfnetwork containing the specified subbasin
+#' @return A sfnetwork containing the specified subbasins
 #' @export
 #'
 #' @examples
-ExtractBasin<-function(shape,root,basin,exclude){
+ExtractBasin<-function(shape,root,basins,exclude,extract.inner=F){
+
+  if(inherits(shape,what = "sfnetwork")){shape<-sf::st_as_sf(sfnetworks::activate(shape,"edges"))}
 
   # check for some errors before we waste a lot of processing time
-  if(missing(basin)){stop("Must specify a basin to extract")}
+  if(missing(basins)){stop("Must specify a basin to extract")}
   echeck<-ifelse(missing(exclude),F,is.character(exclude))
   if(echeck){
     exclude.matches<-apply(as.data.frame(shape),MARGIN = 2,FUN = function(x){return(sum(exclude%in%x))})
@@ -840,30 +906,72 @@ ExtractBasin<-function(shape,root,basin,exclude){
 
   shape.nodes<-sf::st_as_sf(sfnetworks::activate(shape.net2,'nodes'))
   shape.edges<-sf::st_as_sf(sfnetworks::activate(shape.net2,'edges'))
+  root.node.index<-which.min(sf::st_distance(x=root.sf,y=shape.nodes))
 
   # The ideal method is to specify a basin to extract
-  if(is.logical(basin)){
-    b.segments<-shape[which(basin),]
+  if(is.logical(basins)){
+    b.segments<-shape[which(basins),]
   }
-  if(is.numeric(basin) | is.integer(basin)){
-    b.segments<-shape[basin,]
+  if(is.numeric(basins) | is.integer(basins)){
+    b.segments<-shape[basins,]
   }
-  if(is.character(basin)){
-    col.matches<-apply(as.data.frame(shape),MARGIN = 2,FUN = function(x){return(sum(basin%in%x))})
+  if(is.character(basins)){
+    col.matches<-apply(as.data.frame(shape),MARGIN = 2,FUN = function(x){return(sum(basins%in%x))})
     b.col<-which.max(col.matches)
-    b.segments<-shape[which(as.data.frame(shape)[,b.col]%in%basin),]
+    if(length(basins)>max(col.matches)){
+      nomatch<-which(basins%in%as.data.frame(shape)[,b.col]==F)
+      warning("Could not find match for basin '",basins[nomatch],"' using best column '",names(shape)[b.col],"'")
+      basins<-basin[-nomatch]
+    }
+    b.segments<-shape[which(as.data.frame(shape)[,b.col]%in%basins),]
   }
 
-  b.nodes.index<-which(apply(sf::st_intersects(b.segments,shape.nodes,sparse=F),MARGIN=2,FUN=any))
-  b.paths<-sfnetworks::st_network_paths(x = shape.net2,from = root.sf,to = b.nodes.index)[[2]]
-  b.nodes.cost<-sfnetworks::st_network_cost(shape.net2,from=root.sf,to=b.nodes.index,direction="all")[1,]
-  basin.edges<-sort(unique(unlist(b.paths)))
+  # need to identify redundant segments
+  b.roots.index<-rep(NA,nrow(b.segments))
+  b.inner.index<-rep(NA,nrow(b.segments))
 
-  all.paths<-sfnetworks::st_network_paths(x = shape.net2,from = root.sf,to = shape.nodes)[[2]]
+  # we locate the start and end point for each and determine which is the root
+  for(b in 1:nrow(b.segments)){
+    seg.points<-sf::st_cast(sf::st_geometry(b.segments[b,]),"POINT")
+    pts<-c(seg.points[1],seg.points[length(seg.points)])
+    pts.index<-sf::st_nearest_feature(x = pts,y = shape.nodes)
 
-  good.nodes.index<-which(unlist(lapply(all.paths,FUN=function(x){return(any(x%in%basin.edges))})))
+    p.costs<-sfnetworks::st_network_cost(x = shape.net,from = root.sf,to=pts,direction = "all")
 
-  good.edges<-shape.edges[shape.edges$from%in%good.nodes.index | shape.edges$to%in%good.nodes.index,]
+    b.roots.index[b]<-pts.index[which.min(p.costs)]
+
+    # now we go one up from the basin root
+    pts.index2<-which(sf::st_geometry(shape.nodes)%in%sf::st_geometry(seg.points))
+    p.costs2<-sfnetworks::st_network_cost(x = shape.net,from = root.sf,to=shape.nodes[pts.index2,],direction = "all")
+    b.inner.index[b]<-pts.index2[order(p.costs2)[2]]
+  }
+
+  # we keep only the roots that are not also basin nodes
+  b.roots.index<-b.roots.index[b.roots.index%in%b.inner.index==F]
+
+  # we take all paths that link through inner nodes (if you include end nodes, you'll get the whole system)
+  all.paths<-sfnetworks::st_network_paths(x = shape.net2,from = root.sf,to = shape.nodes)
+  good.nodes.index<-which(unlist(lapply(all.paths[[1]],FUN=function(x){return(any(x%in%b.inner.index))})))
+
+  # separately, we find the edges that connect the basins, and put that aside for a few steps
+  basin.connectors<-sort(unique(unlist(all.paths[[2]][b.roots.index])))
+
+  # then we construct a connector that links those roots and the main root
+  if(extract.inner){
+    connector.paths<-sfnetworks::st_network_paths(x = shape.net2,from = root.sf,to = b.roots.index)
+    inner.connect.nodes0<-sort(unique(unlist(connector.paths[[1]])))
+    inner.connect.nodes<-inner.connect.nodes0[inner.connect.nodes0%in%c(root.node.index,b.roots.index)==F]
+
+    # function determines if a path hits an inner node before one of the root nodes
+    good.connect.nodes<-which(unlist(lapply(all.paths[[1]],FUN=function(x){
+      conn<-x[which(x%in%c(inner.connect.nodes,b.roots.index))]
+      return(tail(conn,1)%in%b.roots.index==F)})))
+
+    good.nodes.index<-unique(c(good.nodes.index,good.connect.nodes))
+  }
+
+  # we extract anything that is attached to a valid inner node, and anything required to link the basin roots
+  good.edges<-shape.edges[shape.edges$from%in%good.nodes.index | shape.edges$to%in%good.nodes.index | 1:nrow(shape.edges)%in%basin.connectors,]
 
   plot(sf::st_geometry(good.edges))
   plot(sf::st_geometry(shape),add=T)
@@ -882,6 +990,7 @@ ExtractBasin<-function(shape,root,basin,exclude){
 #'
 #' @param shape A sfnetwork or sf object with LINESTRING geometry to attach data to
 #' @param refshape A sf object with LINESTRING geometry that contains the desired data
+#' @param weight.type interger indicating which weight type is to be used; see details
 #' @param fields A character vector with the names of the columns to attach, or "all"
 #' @param logical T/F determining how to handle logical values
 #' @param tolerance A number used when matching lines that are not perfectly aligned
@@ -890,11 +999,14 @@ ExtractBasin<-function(shape,root,basin,exclude){
 #' @export
 #'
 #' @examples
-AttachData<-function(shape,             # a sf network or sf Linestring object
-                     refshape,          # a sf linestring object with desire data
-                     fields="all",      # a vector of names for which columns are desire
-                     logical=F,         # how to deal with logical info, F will privilege FALSE over TRUE, and vice versa
-                     tolerance=100){     # a distance tolerance for shapes that are slightly out of alignment
+AttachData<-function(shape,
+                     refshape,
+                     weight.type=1,
+                     fields="all",
+                     logical=F,
+                     tolerance=100){
+
+  if(weight.type%in%c(1,2)==F){stop("Select weight.type '1' or '2'")}
 
   if(class(shape)[1]=="sfnetwork"){
     shape.net<-shape
@@ -910,6 +1022,10 @@ AttachData<-function(shape,             # a sf network or sf Linestring object
   }else{
     refshape.net<-sfnetworks::as_sfnetwork(refshape)
     refshape.sf<-refshape
+  }
+
+  if(sf::st_crs(shape)!=sf::st_crs(refshape)){
+    refshape.sf<-sf::st_transform(refshape.sf,crs=sf::st_crs(shape))
   }
 
   shape.names<-names(shape.sf)
@@ -932,7 +1048,6 @@ AttachData<-function(shape,             # a sf network or sf Linestring object
   char.names<-names(ref.types)[which(ref.types%in%c("character","factor"))]
   logic.names<-names(ref.types)[which(ref.types=="logical")]
 
-
   pb<-utils::txtProgressBar(min = 0, max = nrow(shape.sf), initial = 0, style=3)
   # start by pulling out each feature
   for(i in 1:nrow(shape.sf)){
@@ -943,53 +1058,64 @@ AttachData<-function(shape,             # a sf network or sf Linestring object
     end.points<-sf::st_coordinates(shape.sf[i,])[c(1,nrow(sf::st_coordinates(shape.sf[i,]))),]
     end.points.sf<-sf::st_as_sf(as.data.frame(end.points)[,1:2],coords=1:2,crs=sf::st_crs(shape))
 
-    start.ok<-as.numeric(min(sf::st_length(sf::st_nearest_points(x=end.points.sf[1,],y=refshape.sf))))<=tolerance
-    end.ok<-as.numeric(min(sf::st_length(sf::st_nearest_points(x=end.points.sf[2,],y=refshape.sf))))<=tolerance
+    start.dists<-as.numeric(sf::st_length(sf::st_nearest_points(x=end.points.sf[1,],y=refshape.sf)))
+    end.dists<-as.numeric(sf::st_length(sf::st_nearest_points(x=end.points.sf[2,],y=refshape.sf)))
 
-    if(start.ok & end.ok){
-      start.feature<-sf::st_nearest_feature(x = end.points.sf[1,],y=refshape.sf)
-      end.feature<-sf::st_nearest_feature(x = end.points.sf[2,],y=refshape.sf)
+    start.min<-min(start.dists)
+    end.min<-min(end.dists)
 
+    start.check<-sum(start.dists==start.min)
+    end.check<-sum(end.dists==end.min)
+
+    if(start.min<=tolerance & end.min<=tolerance){
+      start.feature<-which(start.dists==start.min,)
+      end.feature<-which(end.dists==end.min)
+
+      # we use two types of weights: the first is the % of shape made up of each refshape feature
+      # and the second is the % of each refshape covered by shape
       #the shape in contained in one feature then the wgt is one
-      if(start.feature==end.feature){
+      if(all(start.feature==end.feature) & (length(start.feature)==1 & length(end.feature)==1)){
         wgt.vec<-1
+        alt.wgt<-as.numeric(sf::st_length(shape.sf[i,])/sf::st_length(refshape.sf[start.feature,]))
         all.features<-start.feature
       }else{
-        # need to compute the weights
-        all.features<-unique(sf::st_nearest_feature(x=shape.points,y=refshape.sf))
+        all.features<-unique(sf::st_nearest_feature(shape.points,refshape.sf))
+
         ref.points<-sf::st_as_sf(as.data.frame(sf::st_coordinates(refshape.sf[all.features,])[,1:2]),
                                  coords=1:2,crs=sf::st_crs(shape))
-
         snap.points<-sf::st_nearest_feature(shape.points,ref.points)
 
-        #test change march 22
-        #new.line<-st_cast(st_combine(ref.points[min(snap.points):max(snap.points),]),"LINESTRING")
         new.line<-sf::st_cast(sf::st_combine(ref.points[snap.points,]),"LINESTRING")
         if(length(unique(snap.points))>1){
-          snap.intersect<-sf::st_intersection(new.line,refshape[all.features,])
+          snap.intersect<-sf::st_intersection(new.line,refshape.sf[all.features,])
           wgt.vec<-as.numeric(sf::st_length(snap.intersect)/sum(sf::st_length(snap.intersect)))
+          alt.wgt<-as.numeric(sf::st_length(snap.intersect))/as.numeric(sf::st_length(refshape.sf[all.features,]))
         }else{
-          wgt.vec<-0
+          wgt.vec<-0  # these cases handle when there is only a single point of overlap
+          alt.wgt<-0
         }
       }
 
+      if(weight.type==1){use.wgt<-wgt.vec}
+      if(weight.type==2){use.wgt<-alt.wgt}
+
       # numeric values are given a weighted average
       if(length(number.names)>0){
-        number.data<-as.data.frame(refshape)[all.features,number.names]
-        transfer.dat[i,number.names]<-apply(X=as.data.frame(number.data)*wgt.vec,FUN="sum",MARGIN=2)
+        number.data<-as.data.frame(refshape.sf)[all.features,number.names]
+        transfer.dat[i,number.names]<-apply(X=as.data.frame(number.data)*use.wgt,FUN="sum",MARGIN=2)
       }
 
       # characters and factors are concatenated
       if(length(char.names)>0){
-        char.data<-as.data.frame(as.data.frame(refshape)[all.features,char.names])
-        char.data<-as.data.frame(char.data[which(wgt.vec>=.25),])
+        char.data<-as.data.frame(as.data.frame(refshape.sf)[all.features,char.names])
+        char.data<-as.data.frame(char.data[which(use.wgt>=.25),])
 
         transfer.dat[i,char.names]<-apply(X=char.data,MARGIN=2,
                                           FUN=function(x){return(paste(unique(as.character(x)),collapse = "*"))})
       }
       #untested : logical values are true only if the entire reach is true
       if(length(logic.names)>0){
-        logic.data<-as.data.frame(refshape)[,logic.names]
+        logic.data<-as.data.frame(refshape.sf)[,logic.names]
         transfer.dat[i,logic.names]<-apply(X=as.integer(logic.data),MARGIN=2,FUN="floor")
       }
     }
@@ -1138,12 +1264,13 @@ PruneNetwork<-function(network,root,exclude,match,tolerance=100,plot=T){
     good.edges2<-good.edges1
   }
 
-  good.edges3<-sf::st_cast(sf::st_line_merge(sf::st_combine(good.edges2)),"LINESTRING")
-  out.network<-RootNetwork(network = sfnetworks::as_sfnetwork(good.edges3),root = root.sf)
+  # removed the simplification step, I think its better if the user calls it separately
+  # good.edges3<-sf::st_cast(sf::st_line_merge(sf::st_combine(good.edges2)),"LINESTRING")
+  out.network<-RootNetwork(network = sfnetworks::as_sfnetwork(good.edges2),root = root.sf,tolerance = 0)
 
   if(plot){
     plot(sf::st_geometry(network.edges))
-    plot(sf::st_geometry(good.edges3),col=2,add=T)
+    plot(sf::st_geometry(good.edges2),col=2,add=T)
   }
 
   return(out.network)
@@ -1223,7 +1350,7 @@ AssignReaches<-function(network,targetsize=100,habitat){
       out.edges<-rbind(out.edges,out.edges0)
     }
   }
-  out.edges$reachid<-1L:nrow(out.edges)
+  out.edges$Reach<-1L:nrow(out.edges)
 
   return(sfnetworks::as_sfnetwork(out.edges))
 }
@@ -1261,7 +1388,7 @@ CheckNetwork<-function(network,root){
   # assign the root
   old.network.edges$root<-old.network.edges$from==root.node.index
 
-  #Now, let renumber the reachids so that they procede in an easy to interpret order
+  #Now, let renumber the Reachs so that they procede in an easy to interpret order
   new.network<-sfnetworks::as_sfnetwork(old.network.edges)
   new.edges<-sf::st_as_sf(sfnetworks::activate(new.network,"edges"))
   new.nodes<-sf::st_as_sf(sfnetworks::activate(new.network,"nodes"))
@@ -1270,7 +1397,7 @@ CheckNetwork<-function(network,root){
   end.nodes<-new.edges$to[new.edges$to%in%new.edges$from==F]
 
   #need to make a table that converts the old order to the new order, then we can grab values from old data frame
-  network.table<-data.frame(oldid=new.edges$reachid,newids=0)
+  network.table<-data.frame(oldid=new.edges$Reach,newids=0)
   costs<-sfnetworks::st_network_cost(x = new.network,from = root.index,to = end.nodes)
   costs2<-sort(costs,decreasing=T)
   end.nodes2<-end.nodes[order(costs,decreasing=T)]
@@ -1286,14 +1413,17 @@ CheckNetwork<-function(network,root){
 
     network.table$newids[match.vec2]<-start.val:(start.val+length(match.vec2)-1)
   }
-  new.edges$reachid<-network.table$newid[match(new.edges$reachid,network.table$oldid)]
-  new.edges<-new.edges[order(new.edges$reachid),]
+  new.edges$Reach<-network.table$newid[match(new.edges$Reach,network.table$oldid)]
+  new.edges<-new.edges[order(new.edges$Reach),]
 
   # now can compute the parents, though this is going to be complicated by habitat/nonhabitat
-  new.edges$parent<-new.edges$reachid[match(new.edges$from,new.edges$to)]
+  new.edges$parent<-new.edges$Reach[match(new.edges$from,new.edges$to)]
 
   new.parent.vec<-rep(NA,nrow(new.edges))
   parent.distance.vec<-rep(NA,nrow(new.edges))
+
+  # the root must be marked habitat
+  new.edges$habitat[which(new.edges$root)]<-TRUE
 
   # now account for habitat
   for(i in 1:nrow(new.edges)){
@@ -1427,26 +1557,31 @@ MakeSurveyTracks<-function(shape, surveys,surveys.crs="wgs84",save.col="all",
         start.seg.points<-sf::st_cast(start.seg,"POINT")
         start.dists<-sf::st_distance(start,start.seg.points)
         if(as.numeric(min(start.dists))<=maxdist){
-          start2<-start.seg.points[which.min(start.dists)]
+          start2<-sf::st_as_sf(start.seg.points[which.min(start.dists)])
         }else{
           # its possible that the fixed point is further away than the desired tolerance
           # in which case, we can resample the line segment to find a closer point
           start.seg.points2<-sf::st_cast(sf::st_line_sample(start.seg,density=1/maxdist),"POINT")
           start.dists2<-sf::st_distance(start,start.seg.points2)
-          start2<-start.seg.points2[which.min(start.dists2)]
+          start2<-sf::st_as_sf(start.seg.points2[which.min(start.dists2)])
         }
       }
       if(!end.ok){
         end.seg.points<-sf::st_cast(end.seg,"POINT")
         end.dists<-sf::st_distance(end,end.seg.points)
         if(as.numeric(min(end.dists))<=maxdist){
-          end2<-end.seg.points[which.min(end.dists)]
+          end2<-sf::st_as_sf(end.seg.points[which.min(end.dists)])
         }else{
           end.seg.points2<-sf::st_cast(sf::st_line_sample(end.seg,density=1/maxdist),"POINT")
           end.dists2<-sf::st_distance(end,end.seg.points2)
-          end2<-end.seg.points2[which.min(end.dists2)]
+          end2<-sf::st_as_sf(end.seg.points2[which.min(end.dists2)])
         }
       }
+
+      # fix a problem where the geometry names are different, (there's prob a better way to do this)
+      sf::st_geometry(start2)<-"geometry"
+      sf::st_geometry(end2)<-"geometry"
+
       # now that we are sure both points are exactly on the stream line, we can add them to the network
       shape.net2<-sfnetworks::st_network_blend(x=shape.net,rbind(sf::st_as_sf(start2),sf::st_as_sf(end2)))
       edge.path<-sfnetworks::st_network_paths(x=shape.net2,from=sf::st_as_sf(start),to=sf::st_as_sf(end),mode="all")
@@ -1684,9 +1819,9 @@ AssembleReddData<-function(shape,                  # shape or network organized 
       redds.sf$Year<-surveys.dat[has.redds[i],year.col]
       redds.sf$Day<-surveys.dat[has.redds[i],day.col]
 
-      closest.reach<-shape.edges$reachid[sf::st_nearest_feature(x=redds.sf,shape.edges)]
+      closest.reach<-shape.edges$Reach[sf::st_nearest_feature(x=redds.sf,shape.edges)]
       closest.dists<-sf::st_distance(redds.sf,shape.edges[match(closest.reach,
-                                                                shape.edges$reachid),],by_element = T)
+                                                                shape.edges$Reach),],by_element = T)
       redds.sf$closest<-closest.reach
       redds.sf$tempID<-active.survey$tempID
 
@@ -1722,8 +1857,8 @@ AssembleReddData<-function(shape,                  # shape or network organized 
     }
     georedds.sf2<-sf::st_transform(georedds.sf,crs=sf::st_crs(shape))
 
-    closest.reach<-shape.edges$reachid[sf::st_nearest_feature(x=georedds.sf2,shape.edges)]
-    closest.dists<-sf::st_distance(georedds.sf2,shape.edges[match(closest.reach,shape.edges$reachid),],by_element = T)
+    closest.reach<-shape.edges$Reach[sf::st_nearest_feature(x=georedds.sf2,shape.edges)]
+    closest.dists<-sf::st_distance(georedds.sf2,shape.edges[match(closest.reach,shape.edges$Reach),],by_element = T)
 
     georedds.sf2$closest<-closest.reach
     georedds.sf3<-georedds.sf2[which(as.integer(closest.dists)<=tolerance.redds),]
@@ -1826,8 +1961,8 @@ AssembleReddData<-function(shape,                  # shape or network organized 
   }
 
   # carry over any covariates
-  var.col<-names(shape.edges)[names(shape.edges)%in%c("from","to","reachid","geometry")==F]
-  reach.match<-match(out.data$Reach,shape.edges$reachid)
+  var.col<-names(shape.edges)[names(shape.edges)%in%c("from","to","Reach","geometry")==F]
+  reach.match<-match(out.data$Reach,shape.edges$Reach)
   out.data<-cbind(out.data,as.data.frame(shape.edges)[reach.match,var.col])
   rownames(out.data)<-NULL
 
