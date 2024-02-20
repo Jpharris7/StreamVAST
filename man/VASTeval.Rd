@@ -2,22 +2,18 @@
 % Please edit documentation in R/Functions_VASTutility.R
 \name{VASTeval}
 \alias{VASTeval}
-\title{Get predictions matched to observations from a vast model}
+\title{Get predictions matched to observations from a vast model. Fills in the evaluation data set, and adds some columns
+to the other slots.}
 \usage{
-VASTeval(model, data, effort = "Effort", time.table = NA)
+VASTeval(streamvast)
 }
 \arguments{
-\item{model}{A VAST model object}
-
-\item{data}{The model data used to fit the VAST model}
-
-\item{effort}{A name for the column with effort information}
-
-\item{time.table}{An optional table matching time to a date, used to provide year, month, and day}
+\item{streamvast}{A VAST model object}
 }
 \value{
-A data frame of observed densities and counts matched to predictions
+A streamvast object with an evaluation data set included
 }
 \description{
-Get predictions matched to observations from a vast model
+Get predictions matched to observations from a vast model. Fills in the evaluation data set, and adds some columns
+to the other slots.
 }

@@ -4,10 +4,24 @@
 \alias{SimplifyNetwork}
 \title{Simplifies a sfnetwork}
 \usage{
-SimplifyNetwork(network, tolerance = 1000, tolerance2 = 1, makeplot = T)
+SimplifyNetwork(
+  network,
+  root,
+  preserve,
+  preserve.type,
+  tolerance = 1000,
+  tolerance2 = 1,
+  makeplot = T
+)
 }
 \arguments{
 \item{network}{A sfnetwork}
+
+\item{root}{an optional sf POINT or other input capatible with RootNetwork; useful if the root gets removed}
+
+\item{preserve}{an optional input that specifies nodes or segments that should not be altered}
+
+\item{preserve.type}{either "nodes" or "edges", indicating which component preserve is referencing}
 
 \item{tolerance}{A integer, segments with no connections below this size are removed}
 

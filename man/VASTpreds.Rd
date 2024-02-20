@@ -4,21 +4,13 @@
 \alias{VASTpreds}
 \title{Get density predictions from a VAST model}
 \usage{
-VASTpreds(model, time = "Time", space = "Reach", time.table = NA, sim.data)
+VASTpreds(streamvast)
 }
 \arguments{
-\item{model}{A VAST model object}
-
-\item{time}{A name for the time variable for the output data frame}
-
-\item{space}{A name for the space variable for the output data frame}
-
-\item{time.table}{An optional table matching time to a date, used to provide year, month, and day}
-
-\item{sim.data}{If you already have a simulated data, save time by supplying it here}
+\item{streamvast}{A VAST model object}
 }
 \value{
-A data frame with density predictions with uncertainty match to space and time
+A streamvast object with a dataframe of predictions added
 }
 \description{
 This function quickly constructs a data frame with VAST density predictions matched to

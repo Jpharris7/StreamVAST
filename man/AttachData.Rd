@@ -4,12 +4,21 @@
 \alias{AttachData}
 \title{Attach Data to a network}
 \usage{
-AttachData(shape, refshape, fields = "all", logical = F, tolerance = 100)
+AttachData(
+  shape,
+  refshape,
+  weight.type = 1,
+  fields = "all",
+  logical = F,
+  tolerance = 100
+)
 }
 \arguments{
 \item{shape}{A sfnetwork or sf object with LINESTRING geometry to attach data to}
 
 \item{refshape}{A sf object with LINESTRING geometry that contains the desired data}
+
+\item{weight.type}{interger indicating which weight type is to be used; see details}
 
 \item{fields}{A character vector with the names of the columns to attach, or "all"}
 

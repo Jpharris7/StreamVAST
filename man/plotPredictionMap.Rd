@@ -5,27 +5,28 @@
 \title{Maps, the desired data, with options for facetting}
 \usage{
 plotPredictionMap(
-  data,
-  mapvar = "preds",
-  reaches,
+  streamvast,
+  mapvar = "Density",
   facet = NA,
-  reach.names = "reachid",
-  make.labels = T,
+  FUN = "mean",
+  background,
+  subset,
+  make.labels = F,
   xaxis.breaks = NA,
   yaxis.breaks = NA,
   palette = "turbo"
 )
 }
 \arguments{
-\item{data}{a data frame with predictions and any grouping data}
+\item{streamvast}{a streamvast object with a prediction data frame}
 
 \item{mapvar}{the column in data to map}
 
-\item{reaches}{an sf object with reach data}
-
 \item{facet}{a column to determine the facets, or a vector of values}
 
-\item{reach.names}{the column in reaches that holds the id numbers}
+\item{background}{a sf object to put in the background}
+
+\item{subset}{a logical vector indicating which pred values to use}
 
 \item{make.labels}{should the reaches be labelled, turn off for multiple years}
 

@@ -4,25 +4,16 @@
 \alias{plotStream}
 \title{Makes a line plot that shows tributaries by stream distance}
 \usage{
-plotStream(
-  data,
-  plotvar,
-  streamdist = "streamdist",
-  rnames = "STRM_NA",
-  reaches,
-  main = NA
-)
+plotStream(streamvast, plotvar, streamname, usepreds, main = NA)
 }
 \arguments{
-\item{data}{a data frame with a variable to plot matched to reach}
+\item{streamvast}{a streamvast object with predictions or evaluations}
 
 \item{plotvar}{the column name in data to be plotted}
 
-\item{streamdist}{name of a column in reaches with stream distance}
+\item{streamname}{the column name in the reaches with the stream name}
 
-\item{rnames}{name or id of reaches}
-
-\item{reaches}{a sf object containing the reach data}
+\item{usepreds}{logical, should the prediction or evaluation data be used, if absent, the function will search}
 
 \item{main}{the name of the mainstem or most important stream, which will be highlighted}
 }

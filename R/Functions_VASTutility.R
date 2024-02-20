@@ -28,7 +28,7 @@
 #' @param aucdata a dataframe with Area under the Curve calculations derived from model
 #' @param covariates a list with elements for the covariates
 #'
-#' @return
+#' @return A streamvast object with appropriate formatting
 #' @export
 #'
 #' @examples
@@ -200,7 +200,7 @@ ConstructStreamVAST<-function(countdata,reachdata,surveydata,vastdata,vastmodel,
 #' @param padzero should survey with zero observations be added at start/end dates
 #' @param Time character giving the timescale to use
 #'
-#' @return
+#' @return A streamvast object with formated with the appropriate temporal frame
 #' @export
 #'
 #' @examples
@@ -415,24 +415,23 @@ SetTemporalFrame<-function(streamvast,startdate=NA,enddate=NA,padzero=T,Time="Ye
 
 #' Add habitat covariates to a streamvast object
 #'
-#' @param streamvast
-#' @param pform
-#' @param dform
-#' @param pconfig
-#' @param dconfig
-#' @param spcovars
-#' @param tempcovars
-#' @param sptpcovars
-#' @param covariatedata
-#' @param append
-#' @param center
-#' @param scale
+#' @param streamvast A streamvast object with temporal and spatial frames defined
+#' @param pform A one-sided formula for covariates affecting the probability of occurance
+#' @param dform A one-sided formula for covariates affecting density given presence
+#' @param pconfig A data frame of control values for pform: See ?VAST::make_data for details
+#' @param dconfig A data frame of control values for dform: See ?VAST::make_data for details
+#' @param spcovars A dataframe or sf object with spatially referenced covariate data
+#' @param tempcovars A dataframe with temporally referenced covariate data
+#' @param covariatedata A dataframe with covariates matched to vastdata
+#' @param append Logical; Should the covariates be appended to any pre-existing covariate data in the object
+#' @param center Logical; Should the covariates be centered to a mean value of zero
+#' @param scale Logical; Should the covariates be scaled to have standard deviation of one
 #'
-#' @return
+#' @return A streamvast object with covariate features appropriately formatted
 #' @export
 #'
 #' @examples
-SetVastCovariates<-function(streamvast,pform,dform,pconfig=NULL,dconfig=NULL,spcovars,tempcovars,sptpcovars,covariatedata,
+SetVastCovariates<-function(streamvast,pform,dform,pconfig=NULL,dconfig=NULL,spcovars,tempcovars,covariatedata,
                             append=T,center=T,scale=T){
 
   # checks; may wish to add more later on
@@ -564,12 +563,12 @@ SetVastCovariates<-function(streamvast,pform,dform,pconfig=NULL,dconfig=NULL,spc
 # also covariates are not implemented at the moment
 #' Title
 #'
-#' @param streamvast      # a streamvast object with a defined temporal frame
-#' @param vastsettings    # a list of settings for a vast model
-#' @param optimize        # logical, should the algorthim run multiple models with varying settings
-#' @param maxiter         # a maximum number of iterations to try before giving up
+#' @param streamvast       a streamvast object with a defined temporal frame
+#' @param vastsettings     a list of settings for a vast model
+#' @param optimize         logical, should the algorthim run multiple models with varying settings
+#' @param maxiter          a maximum number of iterations to try before giving up
 #'
-#' @return
+#' @return A streamvast object with a fitted model attached
 #' @export
 #'
 #' @examples
