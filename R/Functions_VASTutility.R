@@ -572,7 +572,7 @@ SetVastCovariates<-function(streamvast,pform,dform,pconfig=NULL,dconfig=NULL,spc
 #' @export
 #'
 #' @examples
-RunVAST<-function(streamvast,vastsettings,covariatedata,covform.list,optimize=T,compute.stats=F,maxiter=3){
+RunVAST<-function(streamvast,vastsettings,optimize=T,maxiter=3){
 
   if(length(streamvast$preds)>0){warning("VAST model already present. Overwriting pre-existing model.")}
 
@@ -670,12 +670,6 @@ RunVAST<-function(streamvast,vastsettings,covariatedata,covform.list,optimize=T,
   streamvast$vastmodel<-fit.list[[which.min(aic.vec)]]
   streamvast$vastsettings<-settings.list[[which.min(aic.vec)]]
   streamvast$stats$AIC<-min(aic.vec,na.rm=T)
-
-  #consider running the stats as well
-  if(compute.stats){
-    print("Model fitting successful. Computing summary statistics and prediction/evaluation data.")
-    streamvast<-VASTpreds(streamvast)
-  }
 
   return(streamvast)
 }
