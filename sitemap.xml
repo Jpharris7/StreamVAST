@@ -34,6 +34,9 @@
     <loc>/reference/CheckNetwork.html</loc>
   </url>
   <url>
+    <loc>/reference/ConstructStreamVAST.html</loc>
+  </url>
+  <url>
     <loc>/reference/EditFeatures.html</loc>
   </url>
   <url>
@@ -44,9 +47,6 @@
   </url>
   <url>
     <loc>/reference/FixLoops.html</loc>
-  </url>
-  <url>
-    <loc>/reference/FormatStreamData.html</loc>
   </url>
   <url>
     <loc>/reference/index.html</loc>
@@ -62,9 +62,6 @@
   </url>
   <url>
     <loc>/reference/MakeSurveyTracks.html</loc>
-  </url>
-  <url>
-    <loc>/reference/MakeVASTData.html</loc>
   </url>
   <url>
     <loc>/reference/plotPredictionMap.html</loc>
@@ -85,6 +82,15 @@
     <loc>/reference/RootNetwork.html</loc>
   </url>
   <url>
+    <loc>/reference/RunVAST.html</loc>
+  </url>
+  <url>
+    <loc>/reference/SetTemporalFrame.html</loc>
+  </url>
+  <url>
+    <loc>/reference/SetVastCovariates.html</loc>
+  </url>
+  <url>
     <loc>/reference/SimplifyNetwork.html</loc>
   </url>
   <url>
@@ -92,8 +98,5 @@
   </url>
   <url>
     <loc>/reference/VASTpreds.html</loc>
-  </url>
-  <url>
-    <loc>/reference/VASTtotals.html</loc>
   </url>
 </urlset>
