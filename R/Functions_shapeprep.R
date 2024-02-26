@@ -1284,16 +1284,17 @@ PruneNetwork<-function(network,root,exclude,match,tolerance=100,plot=T){
 #' The setnodes argument can be used to ensure certain reach boundaries (not implemented yet)
 #'
 #' @param network A sfnetwork
-#' @param targetsize a desired size to use for reaches
+#' @param targetsize a desired size to use for reaches, set to NA to use only set nodes
 #' @param habitat a logical vector that identifies areas of habitat (T) vs non-habitat (F)
+#' @param setnodes A sf POINTS object that contains nodes to add to the shape
 #'
 #' @return A new sfnetwork object divided into reaches of approximately the correct size
 #' @export
 #'
 #' @examples
-AssignReaches<-function(network,targetsize=100,habitat){
+AssignReaches<-function(network,targetsize=NA,habitat,setnodes){
 
-  if(class(network)[1]!="sfnetwork"){
+  if(inherits(network,"sfnetwork")==F){
     print("Converting shape to sfnetwork")
     network<-Makesfnetwork(network)
   }
@@ -1317,37 +1318,54 @@ AssignReaches<-function(network,targetsize=100,habitat){
   }
   network.edges$habitat<-habitat2
 
-  # we want to identify the best size before diving into the loop
-  reach.lengths<-sf::st_length(network.edges)
-  size.range<-targetsize*90:110/100
-  targetsize.vec<-rep(size.range,each=nrow(network.edges))
+  # If using set reach nodes, blend them in here
+  if(missing(setnodes)==F){
 
-  mod.mat<-matrix(nrow=21,ncol=nrow(network.edges),data=reach.lengths%%targetsize.vec,byrow=T)
-  if(any(network.edges$habitat==F)){mod.mat[,which(network.edges$habitat==F)]<-NA}
-  bestsize<-size.range[which.min(apply(mod.mat,1,sum,na.rm=T))]
-  nreaches.vec<-as.integer(round(reach.lengths/bestsize))
-  nreaches.vec[nreaches.vec==0]<-1
+    # start by checking nodes
+    if(inherits(setnodes,"sf")==F){stop("Setnodes argument must be an sf object with POINT geometry")}
+    if(any(sf::st_geometry_type(setnodes)!="POINT")){stop("Setnodes argument must be an sf object with POINT geometry")}
+    if(sf::st_crs(setnodes)!=sf::st_crs(network.edges)){stop("CRS for setnodes does not match network")}
 
-  print(paste0("Using reach size of ",bestsize))
-  for(i in 1:nrow(network.edges)){
+    set.edges0<-sfnetworks::as_sfnetwork(network.edges)
+    set.edges<-sfnetworks::st_network_blend(x = set.edges0,y = setnodes)
+    network.edges<-sf::st_as_sf(sfnetworks::activate(set.edges,"edges"))
+  }
 
-    reach<-network.edges[i,]
+  if(is.na(targetsize)){
+    out.edges<-network.edges
+  }else{
+    # we want to identify the best size before diving into the loop
+    reach.lengths<-sf::st_length(network.edges)
+    size.range<-targetsize*90:110/100
+    targetsize.vec<-rep(size.range,each=nrow(network.edges))
 
-    if(nreaches.vec[i]==1 | network.edges$habitat[i]==F){
-      out.edges0<-reach
-    }else{
-      reach.nodes0<-sf::st_line_sample(x = reach,sample = c(0,1/nreaches.vec[i]*1:(nreaches.vec[i]-1),1))
-      reach.nodes<-sf::st_as_sf(sf::st_cast(reach.nodes0,"POINT"))
+    mod.mat<-matrix(nrow=21,ncol=nrow(network.edges),data=reach.lengths%%targetsize.vec,byrow=T)
+    if(any(network.edges$habitat==F)){mod.mat[,which(network.edges$habitat==F)]<-NA}
+    bestsize<-size.range[which.min(apply(mod.mat,1,sum,na.rm=T))]
+    nreaches.vec<-as.integer(round(reach.lengths/bestsize))
+    nreaches.vec[nreaches.vec==0]<-1
 
-      reach.net<-suppressWarnings(sfnetworks::st_network_blend(sfnetworks::as_sfnetwork(reach),reach.nodes))
-      out.edges0<-sf::st_as_sf(sfnetworks::activate(reach.net,"edges"))
-    }
+    print(paste0("Using reach size of ",bestsize))
+    for(i in 1:nrow(network.edges)){
 
-    sf::st_geometry(out.edges0)<-"geometry"
-    if(i==1){
-      out.edges<-out.edges0
-    }else{
-      out.edges<-rbind(out.edges,out.edges0)
+      reach<-network.edges[i,]
+
+      if(nreaches.vec[i]==1 | network.edges$habitat[i]==F){
+        out.edges0<-reach
+      }else{
+        reach.nodes0<-sf::st_line_sample(x = reach,sample = c(0,1/nreaches.vec[i]*1:(nreaches.vec[i]-1),1))
+        reach.nodes<-sf::st_as_sf(sf::st_cast(reach.nodes0,"POINT"))
+
+        reach.net<-suppressWarnings(sfnetworks::st_network_blend(sfnetworks::as_sfnetwork(reach),reach.nodes))
+        out.edges0<-sf::st_as_sf(sfnetworks::activate(reach.net,"edges"))
+      }
+
+      sf::st_geometry(out.edges0)<-"geometry"
+      if(i==1){
+        out.edges<-out.edges0
+      }else{
+        out.edges<-rbind(out.edges,out.edges0)
+      }
     }
   }
   out.edges$Reach<-1L:nrow(out.edges)
