@@ -8,32 +8,15 @@
 #' @param countdata A dataframe containing count data, such as outputed from AssembleReddData
 #' @param reachdata A sf object with data for reaches, such as from AssignReaches
 #' @param surveydata A optional data frame or sf object with survey information, such as from MakeSurveyTracks, doesn't do much right now
-#' @param vastinput A dataframe with spatial information for VAST, requires a specific format
-#' @param vastnetwork A dataframe with spatial information for VAST's stream functionality
-#' @param vastnetworkLL A dataframe with spatial information needed for VAST's stream functionality
-#' @param vastdata A dataframe formatted specifically for use with VAST
-#' @param vastsettings a list of settings used to run a vast model
-#' @param vastmodel A fitted VAST model
 #' @param countname A column name from countdata to use
 #' @param reachname a column name from reachdata to use
-#' @param timetable a dataframe converting timesteps to dates
-#' @param timescale The temporal resolution
-#' @param timerange A length two vector with the start and enddate for the temporal
-#' @param title A title or name for the stream system, use for plotting
-#' @param stats A list with summary stats, like RMSE,AIC
-#' @param preds A dataframe of all predictions from the VAST model
-#' @param eval A limited dataframe for evaluating model performance
-#' @param spacedata A dataframe with results aggregated by spatial frame
-#' @param timedata A dataframe with results aggregated by time frame
-#' @param aucdata a dataframe with Area under the Curve calculations derived from model
-#' @param covariates a list with elements for the covariates
 #'
 #' @return A streamvast object with appropriate formatting
 #' @export
 #'
 #' @examples
-ConstructStreamVAST<-function(countdata,reachdata,surveydata,vastdata,vastmodel,countname,reachname,timetable,timescale,timerange,
-                              title,stats,preds,eval,spacedata,timedata,aucdata,unitconv,covariates){
+ConstructStreamVAST<-function(countdata,reachdata,surveydata,
+                              countname,reachname,unitconv){
 
   # if the StreamVAST object is missing, we will construct it from countdata and reachdata
   if(missing(countdata) | missing(reachdata)){
@@ -68,11 +51,17 @@ ConstructStreamVAST<-function(countdata,reachdata,surveydata,vastdata,vastmodel,
     reachname<-r.names[tolower(r.names)==c("reach","reachid","reach_id","reach_no","streamid","stream_id","stream_no")[namepicker[1]]]
   }
 
+  #Fix an occasion naming issue
+  if("parent.distance"%in%names(countdata)){
+    names(countdata)[names(countdata)=="parent.distance"]<-"prnt_ds"
+    }
+
+
   # Calculate some values that aren't in the data already
   reachdata$Length<-as.numeric(sf::st_length(reachdata))*unitconv  # convert feet to km
   countdata$Area<-reachdata$Length[countdata[,reachname]]
   countdata$Effort<-countdata$Effort*unitconv
-  countdata$prnt_ds<-as.numeric(countdata$parent.distance*unitconv)
+  countdata$prnt_ds<-as.numeric(countdata$prnt_ds*unitconv)
   reachdata$prnt_ds<-as.numeric(reachdata$prnt_ds*unitconv)
   countdata$Density<-countdata[,countname]/countdata$Effort
 
@@ -166,26 +155,30 @@ ConstructStreamVAST<-function(countdata,reachdata,surveydata,vastdata,vastmodel,
     ggplot2::theme(legend.title = ggplot2::element_blank())
   print(overlapplot)
 
-  if(missing(title)){title<-NULL}
-  if(missing(vastdata)){vastdata<-NULL}
-  if(missing(timetable)){timetable<-NULL}
-  if(missing(timescale)){timescale<-NULL}
-  if(missing(timerange)){timerange<-NULL}
-  if(missing(vastmodel)){vastmodel<-NULL}
-  if(missing(stats)){stats<-list(AIC=NULL,RMSE=NULL,rho=NULL)}
-  if(missing(preds)){preds<-NULL}
-  if(missing(eval)){eval<-NULL}
-  if(missing(spacedata)){spacedata<-NULL}
-  if(missing(timedata)){timedata<-NULL}
-  if(missing(aucdata)){aucdata<-NULL}
-  if(missing(covariates)){covariates<-list(covariatedata=NULL,pformula=stats::formula(~0),pconfig=NULL,
-                                           dformula=stats::formula(~0),dconfig=NULL)}
+  title<-NULL
+  vastdata<-NULL
+  timetable<-NULL
+  timescale<-NULL
+  timerange<-NULL
+  vastmodel<-NULL
+  stats<-list(AIC=NULL,RMSE=NULL,rhoP=NULL,rhoS=NULL)
+  preds<-NULL
+  eval<-NULL
+  spacedata<-NULL
+  timedata<-NULL
+  aucdata<-NULL
+  dharmafit<-NULL
+  covariates<-list(covariatedata=NULL,pformula=stats::formula(~0),pconfig=NULL,
+                                           dformula=stats::formula(~0),dconfig=NULL)
 
-  StreamVAST<-list(countdata=countdata,reachdata=reachdata,surveydata=surveydata,vastinput=vastinput,vastnetwork=vastnetwork,
-                   vastnetworkLL=vastnetworkLL,title=title,countname=countname,reachname=reachname,vastdata=vastdata,
-                   timetable=timetable,timescale=timescale,timerange=timerange,vastmodel=vastmodel,stats=stats,
-                   preds=preds,eval=eval,spacedata=spacedata,timedata=timedata,aucdata=aucdata,unitconv=unitconv,
-                   covariates=covariates)
+  StreamVAST<-list(countdata=countdata,reachdata=reachdata,surveydata=surveydata,
+                   vastinput=vastinput,vastnetwork=vastnetwork,vastnetworkLL=vastnetworkLL,
+                   title=NULL,countname=countname,reachname=reachname,vastdata=NULL,
+                   timetable=NULL,timescale=NULL,vastmodel=NULL,unitconv=unitconv,
+                   stats=list(AIC=NULL,RMSE=NULL,rhoP=NULL,rhoS=NULL),preds=NULL,
+                   eval=NULL,spacedata=NULL,timedata=NULL,aucdata=NULL,dharmafit=NULL,
+                   covariates=list(covariatedata=NULL,pformula=stats::formula(~0),pconfig=NULL,
+                                   dformula=stats::formula(~0),dconfig=NULL))
 
   class(StreamVAST)<-"streamvast"
   return(StreamVAST)
@@ -401,7 +394,6 @@ SetTemporalFrame<-function(streamvast,startdate=NA,enddate=NA,padzero=T,Time="Ye
   streamvast$vastdata<-out.data
   streamvast$timetable<-time.table
   streamvast$timescale<-Time
-  streamvast$timerange<-c(startdate,enddate)
 
   return(streamvast)
 }
@@ -500,7 +492,8 @@ SetVastCovariates<-function(streamvast,pform,dform,pconfig=NULL,dconfig=NULL,spc
     }
     good.space.names<-which(space.names%in%exclude.names==F)
     match.vec<-match(out.data[,match.name],spcovars[,match.name])
-    space.data<-subset(spcovars,select=good.space.names)[match.vec,]
+    space.data<-as.data.frame(subset(spcovars,select=good.space.names)[match.vec,])
+    names(space.data)<-space.names[good.space.names]
 
     if(center){
       number.covs<-which(unlist(lapply(space.data,inherits,what=c("integer","numeric"))))
@@ -572,9 +565,10 @@ SetVastCovariates<-function(streamvast,pform,dform,pconfig=NULL,dconfig=NULL,spc
 #' @export
 #'
 #' @examples
-RunVAST<-function(streamvast,vastsettings,optimize=T,maxiter=3){
+RunVAST<-function(streamvast,vastsettings,optimize=T,maxiter=3,startpar){
 
   if(length(streamvast$preds)>0){warning("VAST model already present. Overwriting pre-existing model.")}
+  if(missing(startpar)){startpar<-NULL}
 
   if(is.null(vastsettings)){
     if(missing(vastsettings)){
@@ -647,6 +641,7 @@ RunVAST<-function(streamvast,vastsettings,optimize=T,maxiter=3){
                                                    X2config_cp = streamvast$covariates$dconfig,
                                                    X2_formula = streamvast$covariates$dformula,
                                                    newtonsteps = 3,
+                                                   startpar=startpar,
                                                    Aniso=F,
                                                    getsd=T,
                                                    getHessian=T,
@@ -766,7 +761,8 @@ VASTpreds<-function(streamvast){
                        Residual_pearson=NA,
                        Residual_dharma=NA)
 
-  streamvast$stats$rho<-stats::cor(evaldata[6],evaldata[9],method = "spearman")
+  streamvast$stats$rhoP<-stats::cor(evaldata[6],evaldata[9],method = "pearson")
+  streamvast$stats$rhoS<-stats::cor(evaldata[6],evaldata[9],method = "spearman")
   streamvast$stats$RMSE<-sqrt(sum((evaldata[6]-evaldata[9])^2)/nrow(evaldata))
 
   #Seems like a good place to do the residuals
@@ -983,119 +979,10 @@ VASTpreds<-function(streamvast){
   streamvast$eval<-evaldata
   streamvast$spacedata<-spacedata
   streamvast$timedata<-timedata
+  streamvast$dharmafit<-dharmaRes
   streamvast$aucdata<-list(aucdata=aucdata,auctotals=auctotals)
   return(streamvast)
 }
-
-
-#' Get predictions matched to observations from a vast model. Fills in the evaluation data set, and adds some columns
-#' to the other slots.
-#'
-#' @param streamvast A VAST model object
-#'
-#' @return A streamvast object with an evaluation data set included
-#' @export
-#'
-#' @examples
-VASTeval<-function(streamvast){
-
-  if(length(streamvast$eval)>0){warning("Evaluation data already found. Overwriting pre-existing data.")}
-  sim.data<-FishStatsUtils::sample_variable(Sdreport=streamvast$vastmodel$parameter_estimates$SD,
-                                            Obj=streamvast$vastmodel$tmb_list$Obj,variable_name="D_i",n_samples = 100)
-  obs.sim.data<-sim.data[streamvast$vastdata$dummy==F,]
-  obs.data<-subset(streamvast$vastdata,dummy==F)
-  obs.D_i<-streamvast$vastmodel$Report$D_i[streamvast$vastdata$dummy==F]
-
-  out.data<-data.frame(Time=obs.data$Time,
-                       Reach=obs.data[,streamvast$reachname],
-                       Year=obs.data$Year,
-                       Month=obs.data$Month,
-                       Day=obs.data$Day,
-                       Count=obs.data[,streamvast$countname],
-                       Density=obs.data$Density,
-                       Effort=obs.data$Effort,
-                       pCount=obs.D_i,
-                       pCount_upper=apply(obs.sim.data,MARGIN = 1,FUN=stats::quantile,probs=.95),
-                       pCount_lower=apply(obs.sim.data,MARGIN = 1,FUN=stats::quantile,probs=.05),
-                       pDensity=obs.D_i/obs.data$Effort,
-                       pDensity_upper=apply(obs.sim.data/obs.data$Effort,MARGIN = 1,FUN=stats::quantile,probs=.95),
-                       pDensity_lower=apply(obs.sim.data/obs.data$Effort,MARGIN = 1,FUN=stats::quantile,probs=.05),
-                       Residual_count=NA,
-                       Residual_density=NA,
-                       Residual_pearson=NA,
-                       Residual_dharma=NA)
-
-  streamvast$stats$rho<-stats::cor(out.data[6],out.data[9],method = "spearman")
-  streamvast$stats$RMSE<-sqrt(sum((out.data[6]-out.data[9])^2)/nrow(out.data))
-
-  #Seems like a good place to do the residuals
-  # note that due to capability issues,  dHARMa requires the vast model to be stored in an object called "fit" in
-  # .GlobalEnv. Therefore, we do some back end work to make sure we don't overwrite the user's data
-  # first we save a backup using a string that is unlikely to be there, then return the original from the backup
-  had.fit<-F
-  if(exists("fit")){
-    name.nobody_would.ever_use<-fit
-    had.fit<-T
-  }
-  fit<<-streamvast$vastmodel
-  dharmaRes <-summary(streamvast$vastmodel, what="residuals", type=1)
-  par(mfrow=c(1,1))
-  rm(fit,envir = .GlobalEnv)
-  if(had.fit){fit<<-name.nobody_would.ever_use}
-
-  out.data$Residual_count<-out.data$Count-out.data$pCount
-  out.data$Residual_density<-out.data$Density-out.data$pDensity
-  out.data$Residual_pearson<-(out.data$Density-out.data$pDensity)/sqrt(out.data$pDensity)
-  out.data$Residual_dharma<-dharmaRes$scaledResiduals[streamvast$vastdata$dummy==F]
-
-  names(out.data)[6]<-streamvast$countname
-  names(out.data)[9]<-paste0("p",streamvast$countname)
-  names(out.data)[10]<-paste0("p",streamvast$countname,"_upper")
-  names(out.data)[11]<-paste0("p",streamvast$countname,"_lower")
-  names(out.data)[15]<-paste0("Residual",streamvast$countname)
-
-  # This is a good time to fill in the columns in spacedata and timedata
-  # space first
-  for(i in 1:nrow(streamvast$spacedata)){
-    active.reach<-streamvast$spacedata[i,reachname]
-    active.rows<-which(obs.data[,streamvast$reachname]==active.reach)
-
-    if(streamvast$spacedata$Habitat[i]==1 & length(active.rows)>0){
-      r.data<-matrix(obs.sim.data[active.rows,],nrow=length(active.rows),ncol=100)
-      r.data.density<-r.data/obs.data$Effort[active.rows]
-
-      streamvast$spacedata$pCount[i]<-mean(obs.D_i[active.rows])
-      streamvast$spacedata$pCount_lower[i]<-stats::quantile(apply(r.data,MARGIN=2,FUN=mean),prob=.05)
-      streamvast$spacedata$pCount_upper[i]<-stats::quantile(apply(r.data,MARGIN=2,FUN=mean),prob=.95)
-
-      streamvast$spacedata$pDensity[i]<-mean(obs.D_i[active.rows]/obs.data$Effort[active.rows])
-      streamvast$spacedata$pDensity_lower[i]<-stats::quantile(apply(r.data.density,MARGIN=2,FUN=mean),prob=.05)
-      streamvast$spacedata$pDensity_upper[i]<-stats::quantile(apply(r.data.density,MARGIN=2,FUN=mean),prob=.95)
-    }
-  }
-
-  #Time second
-  for(i in 1:nrow(streamvast$timedata)){
-    active.time<-streamvast$timedata$Time[i]
-    active.rows<-which(obs.data$Time==active.time)
-
-    if(length(active.rows)>0){
-      t.data<-matrix(obs.sim.data[active.rows,],nrow=length(active.rows),ncol=100)
-      t.data.density<-t.data/obs.data$Effort[active.rows]
-
-      streamvast$timedata$pCount[i]<-mean(obs.D_i[active.rows])
-      streamvast$timedata$pCount_lower[i]<-stats::quantile(apply(t.data,MARGIN=2,FUN=mean),prob=.05)
-      streamvast$timedata$pCount_upper[i]<-stats::quantile(apply(t.data,MARGIN=2,FUN=mean),prob=.95)
-
-      streamvast$timedata$pDensity[i]<-mean(obs.D_i[active.rows]/obs.data$Effort[active.rows])
-      streamvast$timedata$pDensity_lower[i]<-stats::quantile(apply(t.data.density,MARGIN=2,FUN=mean),prob=.05)
-      streamvast$timedata$pDensity_upper[i]<-stats::quantile(apply(t.data.density,MARGIN=2,FUN=mean),prob=.95)
-    }
-  }
-  streamvast$eval<-out.data
-  return(streamvast)
-}
-
 
 
 #' Makes a line plot that shows tributaries by stream distance
@@ -1104,13 +991,14 @@ VASTeval<-function(streamvast){
 #' @param plotvar the column name in data to be plotted
 #' @param streamname the column name in the reaches with the stream name
 #' @param usepreds logical, should the prediction or evaluation data be used, if absent, the function will search
-#' @param main the name of the mainstem or most important stream, which will be highlighted
+#' @param title
+#' @param show.names
 #'
 #' @return A plot of the variable with respect ot stream distance
 #' @export
 #'
 #' @examples
-plotStream<-function(streamvast,plotvar,streamname,usepreds,main=NA){
+plotStream<-function(streamvast,plotvar,streamname,usepreds,title,show.names="all"){
 
   if(missing(plotvar)){plotvar<-streamvast$countname}
 
@@ -1136,42 +1024,38 @@ plotStream<-function(streamvast,plotvar,streamname,usepreds,main=NA){
 
   reachdata<-as.data.frame(streamvast$reachdata)
 
-  pointdata<-stats::aggregate(vardata[,plotvar],by=list(Reach=vardata[,streamvast$reachname]),FUN=mean)
-  pointdata$streamdist<-reachdata$streamdist[match(pointdata$Reach,reachdata[,streamvast$reachname])]
-  pointdata$name<-reachdata[match(pointdata$Reach,reachdata[,streamvast$reachname]),streamname]
-  names(pointdata)[2]<-"Density"
-
-  parent.table<-data.frame(stream=unique(reachdata[,streamname]),
-                           parent=as.integer(sapply(unique(reachdata[,streamname]),
-                                                    FUN=function(x){min(reachdata$parent[reachdata[,streamname]==x])})))
-
-  joiners<-data.frame(Reach=parent.table$parent,
-                      Density=pointdata$Density[match(parent.table$parent,pointdata$Reach)],
-                      streamdist=pointdata$streamdist[match(parent.table$parent,pointdata$Reach)],
-                      name=parent.table$stream)
-
-  linedata<-rbind(pointdata,stats::na.omit(joiners))
-
-  if(any(is.na(main))==F){
-    pointdata$main<-pointdata$name%in%main
-    linedata$main<-linedata$name%in%main
-
-    outplot<-ggplot2::ggplot()+
-      ggplot2::geom_point(data=pointdata,ggplot2::aes(x=streamdist,y=Density,col=name,size=main),shape=16)+
-      ggplot2::geom_line(data=linedata,ggplot2::aes(x=streamdist,y=Density,col=name,group=name,lwd=main))+
-      ggplot2::scale_size_manual(values=c(1.5,3),guide="none")+
-      ggplot2::scale_linewidth_manual(values=c(1,1.6),guide="none")+
-      ggplot2::theme_bw()+ggplot2::theme(legend.title = ggplot2::element_blank())+
-      ggplot2::xlab("Stream Distance (km)")+ggplot2::ylab(plotvar)+ggplot2::ggtitle(main)
-    outplot
-
-  }else{
-    outplot<-ggplot2::ggplot()+
-      ggplot2::geom_point(data=pointdata,ggplot2::aes(x=streamdist,y=Density,col=name),shape=16)+
-      ggplot2::geom_line(data=linedata,ggplot2::aes(x=streamdist,y=Density,col=name,group=name))+
-      ggplot2::theme_bw()+ggplot2::theme(legend.title = ggplot2::element_blank())+
-      ggplot2::xlab("Stream Distance (km)")+ggplot2::ylab(plotvar)
+  if(show.names[1]=="all"){
+    show.names<-unique(reachdata[,streamname])
+    show.names[-which(show.names=="NA")]
   }
+
+  # Note, can't use the already established parent in this case
+  segdata<-data.frame(Reach=reachdata$Reach,name=reachdata[,streamname],var=0,dist=reachdata$streamdist,
+                      parent=match(reachdata$from,reachdata$to),parentvar=0,parentdist=NA)
+  segdata$name[segdata$name%in%show.names==F]<-NA
+
+  vardata2<-stats::aggregate(vardata[,plotvar],by=list(Reach=vardata[,streamvast$reachname]),FUN=mean)
+  segdata$var[match(vardata2[,streamvast$reachname],segdata$Reach)]<-vardata2$x
+
+  segdata$parentvar<-segdata$var[segdata$parent]
+  segdata$parentdist<-segdata$dist[segdata$parent]
+  segdata$parentvar[is.na(segdata$parentvar)]<-0
+  segdata$parentdist[is.na(segdata$parentdist)]<-0
+
+  outplot<-ggplot2::ggplot()+
+    ggplot2::geom_segment(data=segdata,ggplot2::aes(x=dist,xend=parentdist,y=var,yend=parentvar),col="gray50")+
+    ggplot2::geom_point(data=segdata,ggplot2::aes(x=dist,y=var),shape=16,col="gray50")+
+    ggplot2::geom_segment(data=subset(segdata,is.na(name)==F),
+                          ggplot2::aes(x=dist,xend=parentdist,y=var,yend=parentvar,col=name),
+                          linewidth=1)+
+    ggplot2::geom_point(data=subset(segdata,is.na(name)==F),
+                        ggplot2::aes(x=dist,y=var,col=name),shape=16)+
+    ggplot2::theme_bw()+ggplot2::theme(legend.title = ggplot2::element_blank())+
+    scale_color_viridis(discrete = T)+
+    ggplot2::xlab("Stream Distance (km)")+ggplot2::ylab(plotvar)
+
+  if(missing(title)==F){outplot<-outplot+ggplot2::ggtitle(title)}
+
   return(outplot)
 }
 
@@ -1193,7 +1077,8 @@ plotStream<-function(streamvast,plotvar,streamname,usepreds,main=NA){
 #'
 #' @examples
 plotPredictionMap<-function(streamvast,mapvar="Density",facet=NA,FUN="mean",background,subset,
-                            make.labels=F,xaxis.breaks=NA, yaxis.breaks=NA,palette="turbo"){
+                            make.labels=F,xaxis.breaks=NA, yaxis.breaks=NA,palette="turbo",
+                            max=Inf){
 
   if(missing(subset)){subset<-rep(T,nrow(streamvast$preds))}
 
@@ -1258,9 +1143,13 @@ plotPredictionMap<-function(streamvast,mapvar="Density",facet=NA,FUN="mean",back
   }
   bounds<-sf::st_bbox(sf::st_transform(reachplot,crs = "wgs84"))
 
+  reachplot$preds[reachplot$preds>max]<-max
+
   FUN.name<-mapvar
   if(FUN=="mean"){FUN.name<-paste0("Mean ",mapvar)}
   if(FUN=="var"){FUN.name<-paste0(mapvar, " Variance")}
+  if(mapvar=="Density"){FUN.name<-paste0(FUN.name,"\n (Redds/km)")}
+  if(mapvar=="Density_stdev"){FUN.name<-"Mean Standard\nDeviation in Density"}
 
   if(missing(background)){
     map<-ggplot2::ggplot()
@@ -1292,5 +1181,45 @@ plotPredictionMap<-function(streamvast,mapvar="Density",facet=NA,FUN="mean",back
   return(map)
 }
 
+
+
+#' Plot the dHARMa scaled residuals, accounts for dummy data
+#'
+#' @param streamvast A streamvast object with fitted model and predictions
+#' @param span A smoothing parameter for the line
+#'
+#' @return a plot mimicing the style of dHARMa, but accounts for dummy data
+#' @export
+#'
+#' @examples
+Dharmaplot<-function(streamvast,span=.1){
+
+  scale.ranks<-rank(streamvast$dharmafit$fittedPredictedResponse)/
+    length(streamvast$dharmafit$fittedPredictedResponse)
+
+  good.picks<-which(streamvast$vastdata$dummy==F)
+  good.ranks<-scale.ranks[good.picks]
+  good.resids<-streamvast$dharmafit$scaledResiduals[good.picks]
+
+  bins<-0:100/100
+  median.vec<-rep(NA,100)
+  for(i in 1:(length(bins)-1)){
+    start=bins[i]
+    stop=bins[i+1]
+    rank.picks<-which(good.ranks>start & good.ranks<=stop)
+    median.vec[i]<-median(good.resids[rank.picks])
+  }
+
+  pt.dat<-data.frame(x=good.ranks,y=good.resids)
+  line.dat<-data.frame(x=1:100/100, y=predict(loess(y~x,data=data.frame(x=1:100/100,y=median.vec),
+                                                    span = span),newdata = data.frame(x=1:100/100)))
+
+  outplot<-ggplot()+geom_point(data=pt.dat,aes(x=x,y=y),alpha=.25)+
+    geom_line(data=line.dat,aes(x=x,y=y),col=2,linewidth=1.5)+
+    geom_hline(yintercept=c(.05,.25,.4,.5,.6,.75,.95),col=2,linetype=2)+
+    theme_bw()+xlab("Rank-transformed Predictions")+ylab("Scaled Residuals")
+
+  return(outplot)
+}
 
 

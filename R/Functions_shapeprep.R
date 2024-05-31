@@ -100,23 +100,65 @@ FindRoots<-function(shape,mainstem=NA){
 #'
 #' @param shape An sf object with LINESTRING or MULTILINESTRING geometry
 #' @param attach.data Logical, whether data fields should be preserved
+#' @param simple Logical, whether to use the fast and simple method, or the slower more thorough method
 #'
 #' @return A sfnetwork object
 #' @export
 #'
 #' @examples
-Makesfnetwork<-function(shape,attach.data=T){
+Makesfnetwork<-function(shape,attach.data=F,simple=T){
 
-  shape.net0<-sfnetworks::as_sfnetwork(sf::st_as_sf(shape),)
+  shape.net<-sfnetworks::as_sfnetwork(sf::st_as_sf(shape),)
+  shape.nodes<-sf::st_as_sf(sfnetworks::activate(shape.net,"nodes"))
+  shape.edges<-sf::st_as_sf(sfnetworks::activate(shape.net,"edges"))
 
-  connect.check<-sfnetworks::st_network_cost(shape.net0,1,direction="all")[1,]
-  if(any(is.infinite(connect.check))){
+  dosplit<-ifelse(simple,F,T)
 
-    shape.nodes0<-sf::st_as_sf(sfnetworks::activate(shape.net0,"nodes"))
-    shape.edges0<-sf::st_as_sf(sfnetworks::activate(shape.net0,"edges"))
+  if(simple){
+    connect.check<-sfnetworks::st_network_cost(shape.net,1,direction="all")[1,]
+    dosplit<-any(is.infinite(connect.check))
+    if(dosplit){print("Converting shape to sfnetwork using the simple method")}
+  }else{
+    print("Converting shape to sfnetwork using the thorough method")
+    # now an advanced step that goes piece by piece to prevent R from running over memory limits
+    int.mat<-sf::st_intersects(shape.edges)
+    pb<-utils::txtProgressBar(min = 0, max = nrow(shape.edges), initial = 0, style=3)
+    for(i in 1:length(int.mat)){
 
-    shape.edges0.combined<-sf::st_union(shape.edges0)
-    new.edges0<-lwgeom::st_split(x=shape.edges0.combined,y=shape.nodes0)
+      int.shapes<-shape.edges[int.mat[[i]],]
+      intersect.shapes<-st_as_sf(st_as_sfc(unique(sf::st_geometry(sf::st_intersection(int.shapes)))),crs=st_crs(shape))
+
+      int.points0<-intersect.shapes[sf::st_geometry_type(intersect.shapes)=="POINT",]
+      int.lines0<-intersect.shapes[sf::st_geometry_type(intersect.shapes)=="LINESTRING",]
+      int.mpoints<-sf::st_cast(intersect.shapes[sf::st_geometry_type(intersect.shapes)=="MULTIPOINT",],"POINT")
+      int.mlines<-sf::st_cast(intersect.shapes[sf::st_geometry_type(intersect.shapes)=="MULTILINESTRING",],"LINESTRING")
+
+      int.points<-c(sf::st_geometry(int.points0),sf::st_geometry(int.mpoints))
+      int.lines<-c(sf::st_geometry(int.lines0),sf::st_geometry(int.mlines))
+
+      # This bit deals with lines that may be slightly overlapping
+      l.mat<-sf::st_equals(int.lines,shape.edges)
+      lines.to.blend<-unlist(lapply(l.mat,FUN=function(x){return(length(x)==0)}))
+      if(any(lines.to.blend)){
+        int.line.pts<-sf::st_cast(int.lines[which(lines.to.blend)],"POINT")
+        int.points<-c(int.points,int.line.pts)
+      }
+
+      int.points2<-sf::st_as_sf(sf::st_as_sfc(unique(int.points),crs=sf::st_crs(shape)))
+      p.mat<-sf::st_equals(int.points2,shape.nodes)
+      points.to.blend<-unlist(lapply(p.mat,FUN=function(x){return(length(x)==0)}))
+      if(any(points.to.blend)){
+        shape.nodes<-rbind(shape.nodes,int.points2[points.to.blend,])
+      }
+      utils::setTxtProgressBar(pb,i)
+    }
+    close(pb)
+  }
+
+  if(dosplit){
+    # now to cut at those points
+    shape.edges.combined<-sf::st_union(shape.edges)
+    new.edges0<-lwgeom::st_split(x=shape.edges.combined,y=shape.nodes)
     new.edges<-sf::st_sf(sf::st_collection_extract(new.edges0,"LINESTRING"))
     sf::st_geometry(new.edges)<-attr(sf::st_as_sf(shape),"sf_column")
 
@@ -125,12 +167,11 @@ Makesfnetwork<-function(shape,attach.data=T){
     }else{
       new.edges2<-new.edges
     }
-    shape.net<-sfnetworks::as_sfnetwork(new.edges2)
   }else{
-    shape.net<-shape.net0
+    new.edges2<-shape.edges
   }
 
-  return(shape.net)
+  return(sfnetworks::as_sfnetwork(new.edges2))
 }
 
 # runs a quick format check that a given point is a proper sf point
@@ -172,7 +213,7 @@ PointSetup<-function(point,crs){
 #' @examples
 LocateRoot<-function(network){
 
-  if(class(network)[1]=="sf"){
+  if(inherits(network,"sf")){
     network<-suppressWarnings(sfnetworks::as_sfnetwork(network))
   }
   connection.fail<-any(is.infinite(sfnetworks::st_network_cost(network,from = 1,direction = "all")[1,]))
@@ -205,15 +246,22 @@ LocateRoot<-function(network){
 #'
 #' @param network A sfnetwork
 #' @param root A sf point, or coordinates for the new root
+#' @param root.crs a crs or string for the root, if it is different from the network
 #' @param tolerance A distance that determines whether to use existing nodes or blend in a new one
 #'
 #' @return A sfnetwork with the new root
 #' @export
 #'
 #' @examples
-RootNetwork<-function(network,root,tolerance=Inf){
+RootNetwork<-function(network,root,root.crs,tolerance=Inf){
 
-  root.sf<-PointSetup(point = root,crs = sf::st_crs(network))
+  if(missing(root.crs)){
+    root.sf<-PointSetup(point = root,crs = sf::st_crs(network))
+  }else{
+    root.sf0<-PointSetup(point = root,crs = root.crs)
+    root.sf<-sf::st_transform(root.sf0,crs=sf::st_crs(network))
+  }
+
   network.nodes0<-sf::st_as_sf(sfnetworks::activate(network,"nodes"))
   network.edges0<-sf::st_as_sf(sfnetworks::activate(network,"edges"))
   network0<-network
@@ -680,10 +728,11 @@ AddFeatures<-function(network,nodes,edges,crs,tolerance=200,tolerance2=10){
     if(class(nodes)[1]=="data.frame"){
       if(any((c("lon","lat")%in%names(nodes))==F)){stop("Invalid data frame for nodes. Must contain columns named 'lon' and 'lat'")}
       node.points<-sf::st_as_sf(nodes[,c("lon","lat")],coords=1:2,crs=crs)
+      node.points<-sf::st_transform(node.points,crs = sf::st_crs(network))
     }
     if(class(nodes)[1]=="sf"){
       if(any(sf::st_geometry_type(nodes)!="POINT")){stop("Nodes must have POINT geometry")}
-      node.points<-sf::st_transform(nodes,crs = crs)
+      node.points<-sf::st_transform(nodes,crs = sf::st_crs(network))
     }
 
     # check that the points are on the network
@@ -804,7 +853,7 @@ SimplifyNetwork<-function(network,root,preserve,preserve.type,tolerance=1000,tol
         already.done<-c(already.done,matches)
       }
       if(length(distinct.edges)>0){
-        new.network.edges<-rbind(new.network.edges,active.edge,match.edges[distinct.edges])
+        new.network.edges<-rbind(new.network.edges,active.edge,match.edges[distinct.edges,])
         already.done<-c(already.done,matches)
       }
     }
@@ -860,22 +909,25 @@ SimplifyNetwork<-function(network,root,preserve,preserve.type,tolerance=1000,tol
 #' @param basins a vector of names or sf feature indicating the basin to be extracted
 #' @param exclude vector indexes to be dropped, will attempt to match a single name
 #' @param extract.inner logical; should nodes that are in between the basins and the root be extracted
+#' @param attach.data logical; should old data fields be obtained; time consuming
+#' @param upper a point or points to stop the extraction
+#' @param upper.crs a crs string for the upper point, if different from shape
 #'
 #' @return A sfnetwork containing the specified subbasins
 #' @export
 #'
 #' @examples
-ExtractBasin<-function(shape,root,basins,exclude,extract.inner=F){
+ExtractBasin<-function(shape,root,basins,exclude,extract.inner=F,attach.data=T,upper,upper.crs){
 
   if(inherits(shape,what = "sfnetwork")){shape<-sf::st_as_sf(sfnetworks::activate(shape,"edges"))}
 
   # check for some errors before we waste a lot of processing time
-  if(missing(basins)){stop("Must specify a basin to extract")}
+  if(missing(basins) & missing(upper)){stop("Must specify a basin to extract")}
   echeck<-ifelse(missing(exclude),F,is.character(exclude))
   if(echeck){
     exclude.matches<-apply(as.data.frame(shape),MARGIN = 2,FUN = function(x){return(sum(exclude%in%x))})
-    if(sum(exclude.matches==max(exclude.matches))>1){stop("Multiple columns match basin argument!")}
-    if(sum(exclude.matches==max(exclude.matches))==0){stop("Zero columns match basin argument!")}
+    if(sum(exclude.matches==max(exclude.matches))>1){stop("Multiple columns match exclude argument!")}
+    if(sum(exclude.matches==max(exclude.matches))==0){stop("Zero columns match exclude argument!")}
   }
 
   # First off, drop anything in exclude
@@ -900,13 +952,36 @@ ExtractBasin<-function(shape,root,basins,exclude,extract.inner=F){
   root.sf<-PointSetup(point = root,crs = sf::st_crs(shape))
 
   # Setup the network
-  print("Converting sf lines to sfnetwork")
-  shape.net<-Makesfnetwork(shape2,attach.data = F)
+  shape.net<-Makesfnetwork(shape = shape2,attach.data = F)
   shape.net2<-RootNetwork(network = shape.net,root=root.sf)
 
   shape.nodes<-sf::st_as_sf(sfnetworks::activate(shape.net2,'nodes'))
   shape.edges<-sf::st_as_sf(sfnetworks::activate(shape.net2,'edges'))
   root.node.index<-which.min(sf::st_distance(x=root.sf,y=shape.nodes))
+
+  # If upper points have been specified, drop everything above those points
+  if(missing(upper)==F){
+    if(missing(upper.crs)){upper.crs<-sf::st_crs(shape)}
+    upper.points<-PointSetup(upper,crs=upper.crs)
+    upper.points2<-sf::st_transform(x = upper.points,crs = sf::st_crs(shape))
+
+    shape.net2<-st_network_blend(x = shape.net2,y = upper.points2)
+    shape.nodes<-sf::st_as_sf(sfnetworks::activate(shape.net2,'nodes'))
+    shape.edges<-sf::st_as_sf(sfnetworks::activate(shape.net2,'edges'))
+    upper.index<-st_nearest_feature(x = upper.points2,y = shape.nodes)
+    all.paths<-sfnetworks::st_network_paths(x = shape.net2,from = root.sf)
+
+    drop.nodes.index<-which(unlist(lapply(all.paths[[1]],FUN=function(x){return(any(x%in%upper.index))})))
+    drop.nodes.index<-drop.nodes.index[drop.nodes.index%in%upper.index==F]
+
+    drop.segs<-which(shape.edges$from%in%drop.nodes.index | shape.edges$to%in%drop.nodes.index)
+
+    new.edges<-shape.edges[-drop.segs,]
+    shape.net2<-as_sfnetwork(new.edges)
+    shape.nodes<-sf::st_as_sf(sfnetworks::activate(shape.net2,'nodes'))
+    shape.edges<-sf::st_as_sf(sfnetworks::activate(shape.net2,'edges'))
+    root.node.index<-which.min(sf::st_distance(x=root.sf,y=shape.nodes))
+  }
 
   # The ideal method is to specify a basin to extract
   if(is.logical(basins)){
@@ -965,6 +1040,7 @@ ExtractBasin<-function(shape,root,basins,exclude,extract.inner=F){
     # function determines if a path hits an inner node before one of the root nodes
     good.connect.nodes<-which(unlist(lapply(all.paths[[1]],FUN=function(x){
       conn<-x[which(x%in%c(inner.connect.nodes,b.roots.index))]
+      if(length(conn)==0){return(FALSE)}
       return(tail(conn,1)%in%b.roots.index==F)})))
 
     good.nodes.index<-unique(c(good.nodes.index,good.connect.nodes))
@@ -972,6 +1048,10 @@ ExtractBasin<-function(shape,root,basins,exclude,extract.inner=F){
 
   # we extract anything that is attached to a valid inner node, and anything required to link the basin roots
   good.edges<-shape.edges[shape.edges$from%in%good.nodes.index | shape.edges$to%in%good.nodes.index | 1:nrow(shape.edges)%in%basin.connectors,]
+
+  if(attach.data){
+    good.edges<-AttachData(shape = good.edges,refshape = shape2)
+  }
 
   plot(sf::st_geometry(good.edges))
   plot(sf::st_geometry(shape),add=T)
@@ -1015,6 +1095,7 @@ AttachData<-function(shape,
     shape.net<-sfnetworks::as_sfnetwork(shape)
     shape.sf<-shape
   }
+  shape.sf.union<-sf::st_union(shape.sf)
 
   if(class(refshape)[1]=="sfnetwork"){
     refshape.net<-refshape
@@ -1027,9 +1108,10 @@ AttachData<-function(shape,
   if(sf::st_crs(shape)!=sf::st_crs(refshape)){
     refshape.sf<-sf::st_transform(refshape.sf,crs=sf::st_crs(shape))
   }
+  refshape.sf<-refshape.sf[sf::st_intersects(x=refshape.sf,y=shape.sf.union,sparse = F),]
 
   shape.names<-names(shape.sf)
-  ref.names<-names(refshape)
+  ref.names<-names(refshape.sf)
   sf.name<-attr(refshape,"sf_column")
 
   if(fields[1]=="all"){
@@ -1043,7 +1125,7 @@ AttachData<-function(shape,
   transfer.dat<-as.data.frame(transfer.mat)
 
   #We'll also need to know the kind of data in each column
-  ref.types<-unlist(sapply(as.data.frame(refshape),class))[transfer.names]
+  ref.types<-unlist(sapply(as.data.frame(refshape.sf),class))[transfer.names]
   number.names<-names(ref.types)[which(ref.types%in%c("numeric","integer"))]
   char.names<-names(ref.types)[which(ref.types%in%c("character","factor"))]
   logic.names<-names(ref.types)[which(ref.types=="logical")]
@@ -1207,7 +1289,7 @@ PruneNetwork<-function(network,root,exclude,match,tolerance=100,plot=T){
   }
   if(exclude.class=="character"){
     ex.no<-apply(as.data.frame(network.edges),MARGIN = 2,FUN = function(x){return(sum(exclude%in%x))})
-    if(ex.no==0){stop("Could not find exclude criterion; Check spelling?")}
+    if(max(ex.no)==0){stop("Could not find exclude criterion; Check spelling?")}
     ex.col<-which.max(ex.no)
     drop<-which(as.data.frame(network.edges)[,ex.col]%in%exclude)
   }
@@ -1230,7 +1312,7 @@ PruneNetwork<-function(network,root,exclude,match,tolerance=100,plot=T){
     if(any(sf::st_geometry_type(match)%in%c("POINT","LINESTRING")==F)){stop("Invalid geometry type in match argument")}
     if(length(unique(sf::st_geometry_type(match)))>1){stop("Multiple geometry types in match argument")}
 
-    network2<-Makesfnetwork(good.edges1)
+    network2<-Makesfnetwork(good.edges1,attach.data = F)
     network2<-RootNetwork(network2,root = root.sf)
     network.edges2<-sf::st_as_sf(sfnetworks::activate(network2,"edges"))
     network.nodes2<-sf::st_as_sf(sfnetworks::activate(network2,"nodes"))
@@ -1398,9 +1480,14 @@ CheckNetwork<-function(network,root){
   reversed<-which(root.distances[network.edges$from]>root.distances[network.edges$to])
 
   old.network.edges<-network.edges
-  if(length(reversed>0)){
+  if(length(reversed)>0){
     old.network.edges$from[reversed]<-network.edges$to[reversed]
     old.network.edges$to[reversed]<-network.edges$from[reversed]
+
+    for(i in 1:length(reversed)){
+      old.line<-old.network.edges$geometry[reversed[i]]
+      old.network.edges$geometry[reversed[i]]<-sf::st_reverse(old.line)
+    }
   }
 
   # assign the root
@@ -1791,7 +1878,7 @@ FixLoops<-function(network,root,guides=NULL){
 #' @export
 #'
 #' @examples
-AssembleReddData<-function(shape,                  # shape or network organized into reaches
+AssembleReddData<-function(shape,                 # shape or network organized into reaches
                            georedds=NA,           # data frame with a redd in each row
                            georedds.type=NA,      # name of a column to sort redds by, counts are then kept separately
                            georedds.coords=NA,    # vector of length two with the names of the lon/lat columns
@@ -1819,59 +1906,29 @@ AssembleReddData<-function(shape,                  # shape or network organized 
   surveys.dat<-as.data.frame(good.surveys)
   day.col<-which(tolower(names(surveys.dat))=="day")
   year.col<-which(tolower(names(surveys.dat))=="year")
-
-  # There are a lot of potential ways to assign non-georeferenced redds, but for now
-  # we will just assume even spacing along the survey line
-  # need to improve method of handling dates
-  print("Geo-locating Redds")
-  if(is.na(survey.redds)==F){
-    has.redds<-which(as.data.frame(good.surveys)[,survey.redds]>0)
-
-    pb<-utils::txtProgressBar(min = 0, max = length(has.redds), initial = 0, style=3)
-    for(i in 1:length(has.redds)){
-      active.survey<-good.surveys[has.redds[i],]
-
-      redds<-as.data.frame(active.survey)[,survey.redds]
-      redds.sf<-sf::st_as_sf(sf::st_cast(sf::st_line_sample(active.survey,
-                                                            sample = (1:redds)/(redds+1)),"POINT"))
-      redds.sf$Year<-surveys.dat[has.redds[i],year.col]
-      redds.sf$Day<-surveys.dat[has.redds[i],day.col]
-
-      closest.reach<-shape.edges$Reach[sf::st_nearest_feature(x=redds.sf,shape.edges)]
-      closest.dists<-sf::st_distance(redds.sf,shape.edges[match(closest.reach,
-                                                                shape.edges$Reach),],by_element = T)
-      redds.sf$closest<-closest.reach
-      redds.sf$tempID<-active.survey$tempID
-
-      if(i==1){
-        survey.redds.sf<-redds.sf[as.numeric(closest.dists)<=tolerance.redds,]
-      }else{
-        survey.redds.sf<-rbind(survey.redds.sf,redds.sf[as.numeric(closest.dists)<=tolerance.redds,])
-      }
-      utils::setTxtProgressBar(pb,i)
-    }
-    close(pb)
-  }else{
-    survey.redds.sf<-NULL
-  }
+  if(length(year.col)!=1 | length(day.col)!=1){stop("Please ensure your survey data contains columns named 'Year' and 'Day'")}
 
   # Setup any georeferenced redds, should improve handling of dates so that it's not just assumed to be in
   # correct format
   if(is.data.frame(georedds)){
     print("Formatting georeferenced counts")
-    if(is.na(georedds.coords)[1]){
-      lon.col<-which(tolower(names(georedds))%in%c("longitude","lon","long","x"))[1]
-      lat.col<-which(tolower(names(georedds))%in%c("latitude","lat","y"))[1]
+    if(inherits(georedds,"sf")){
+      georedds.sf<-georedds
     }else{
-      lon.col<-georedds.coords[1]
-      lat.col<-georedds.coords[2]
-    }
+      if(is.na(georedds.coords)[1]){
+        lon.col<-which(tolower(names(georedds))%in%c("longitude","lon","long","x"))[1]
+        lat.col<-which(tolower(names(georedds))%in%c("latitude","lat","y"))[1]
+      }else{
+        lon.col<-georedds.coords[1]
+        lat.col<-georedds.coords[2]
+      }
 
-    badrow<-which(is.na(georedds[,lon.col]) | is.na(georedds[,lat.col]))
-    if(length(badrow)>0){
-      georedds.sf<-sf::st_as_sf(georedds[-badrow,],coords=c(lon.col,lat.col),crs=reddcrs)
-    }else{
-      georedds.sf<-sf::st_as_sf(georedds,coords=c(lon.col,lat.col),crs=reddcrs)
+      badrow<-which(is.na(georedds[,lon.col]) | is.na(georedds[,lat.col]))
+      if(length(badrow)>0){
+        georedds.sf<-sf::st_as_sf(georedds[-badrow,],coords=c(lon.col,lat.col),crs=reddcrs)
+      }else{
+        georedds.sf<-sf::st_as_sf(georedds,coords=c(lon.col,lat.col),crs=reddcrs)
+      }
     }
     georedds.sf2<-sf::st_transform(georedds.sf,crs=sf::st_crs(shape))
 
@@ -1884,20 +1941,73 @@ AssembleReddData<-function(shape,                  # shape or network organized 
     redd.day.col<-which(tolower(names(georedds.sf3))=="day")
     redd.year.col<-which(tolower(names(georedds.sf3))=="year")
 
+    names(georedds.sf3)[redd.day.col]<-"Day"
+    names(georedds.sf3)[redd.year.col]<-"Year"
+
     georedds.sf3$tempID<-NA
     # need to match redds to surveys
     pb<-utils::txtProgressBar(min = 0, max = nrow(georedds.sf3), initial = 0, style=3)
     for(i in 1:nrow(georedds.sf3)){
       good.surveys2<-good.surveys[surveys.dat[,year.col]==as.data.frame(georedds.sf3)[i,redd.year.col] &
                                     surveys.dat[,day.col]==as.data.frame(georedds.sf3)[i,redd.day.col],]
-      survey.dists<-sf::st_length(sf::st_nearest_points(georedds.sf3[i,],good.surveys2))
+      if(nrow(good.surveys2)>0){
+        survey.dists<-sf::st_length(sf::st_nearest_points(georedds.sf3[i,],good.surveys2))
 
-      georedds.sf3$tempID[i]<-good.surveys2$tempID[which.min(survey.dists)]
+        georedds.sf3$tempID[i]<-good.surveys2$tempID[which.min(survey.dists)]
+      }
       utils::setTxtProgressBar(pb,i)
     }
     close(pb)
+    sf::st_geometry(georedds.sf3)<-"geometry"
+    georedds.sf3<-georedds.sf3[is.na(georedds.sf3$tempID)==F,c("Year","Day","closest","tempID")]
   }else{
     georedds.sf3<-NULL
+  }
+
+  # There are a lot of potential ways to assign non-georeferenced redds, but for now
+  # we will just assume even spacing along the survey line
+  # need to improve method of handling dates
+  # Also need to adjust to ensure it functions when there are no survey redds
+  print("Geo-locating Survey Redds w/o GPS")
+  if(is.na(survey.redds)==F){
+    has.redds<-which(as.data.frame(good.surveys)[,survey.redds]>0)
+
+    pb<-utils::txtProgressBar(min = 0, max = length(has.redds), initial = 0, style=3)
+
+    survey.redds.sf<-sf::st_as_sf(data.frame(Year=vector(),Day=vector(),closest=vector(),tempID=vector(),
+                                             x=vector(),y=vector()),coords=c("x","y"),crs=sf::st_crs(shape))
+    for(i in 1:length(has.redds)){
+      active.survey<-good.surveys[has.redds[i],]
+      redds<-as.data.frame(active.survey)[,survey.redds]
+
+      if(nrow(georedds.sf3)>0){
+        accounted.for<-georedds.sf3[georedds.sf3$tempID==active.survey$tempID,]
+      }else{
+        accounted.for<-0
+      }
+
+      no.unaccounted<-redds-nrow(accounted.for)
+      if(no.unaccounted>0){
+
+        redds.sf<-sf::st_as_sf(sf::st_cast(sf::st_line_sample(active.survey,
+                                                              sample = (1:no.unaccounted)/(no.unaccounted+1)),"POINT"))
+        redds.sf$Year<-surveys.dat[has.redds[i],year.col]
+        redds.sf$Day<-surveys.dat[has.redds[i],day.col]
+
+        closest.reach<-shape.edges$Reach[sf::st_nearest_feature(x=redds.sf,shape.edges)]
+        closest.dists<-sf::st_distance(redds.sf,shape.edges[match(closest.reach,
+                                                                  shape.edges$Reach),],by_element = T)
+        redds.sf$closest<-closest.reach
+        redds.sf$tempID<-active.survey$tempID
+
+        survey.redds.sf<-rbind(survey.redds.sf,redds.sf[as.numeric(closest.dists)<=tolerance.redds,])
+      }
+      utils::setTxtProgressBar(pb,i)
+    }
+    sf::st_geometry(survey.redds.sf)<-"geometry"
+    close(pb)
+  }else{
+    survey.redds.sf<-NULL
   }
   good.redds<-rbind(survey.redds.sf,georedds.sf3)
 
@@ -1963,21 +2073,22 @@ AssembleReddData<-function(shape,                  # shape or network organized 
   # in future, may wish to preserve this difference, would require attaching a survey id to the data
   # Will need updating when it is time to work with surveys that don't have georeferenced redds
   doubles<-names(which(table(paste(out.data$Year,out.data$Day,out.data$Reach,sep="_"))>1))
-  for(i in 1:length(doubles)){
-    y<-strsplit(doubles[i],split="_")[[1]][1]
-    d<-strsplit(doubles[i],split="_")[[1]][2]
-    r<-strsplit(doubles[i],split="_")[[1]][3]
+  if(length(doubles)>0){
+    for(i in 1:length(doubles)){
+      y<-strsplit(doubles[i],split="_")[[1]][1]
+      d<-strsplit(doubles[i],split="_")[[1]][2]
+      r<-strsplit(doubles[i],split="_")[[1]][3]
 
-    d.rows<-which(out.data$Year==y & out.data$Day==d & out.data$Reach==r)
-    d.data<-out.data[d.rows,]
+      d.rows<-which(out.data$Year==y & out.data$Day==d & out.data$Reach==r)
+      d.data<-out.data[d.rows,]
 
-    new.data<-data.frame(Year=as.integer(y),Day=as.integer(d),Reach=as.integer(r),
-                         Effort=sum(d.data$Effort))
-    if(length(redd.codes)==1){new.redds<-data.frame(Redds=sum(d.data$redds))}
-    if(length(redd.codes)>1){new.redds<-t(as.data.frame(apply(d.data[,-(1:4)],MARGIN=2,FUN=sum)))}
-    out.data<-rbind(out.data[-d.rows,],cbind(new.data,new.redds))
+      new.data<-data.frame(Year=as.integer(y),Day=as.integer(d),Reach=as.integer(r),
+                           Effort=sum(d.data$Effort))
+      if(length(redd.codes)==1){new.redds<-data.frame(Redds=sum(d.data$Redds))}
+      if(length(redd.codes)>1){new.redds<-t(as.data.frame(apply(d.data[,-(1:4)],MARGIN=2,FUN=sum)))}
+      out.data<-rbind(out.data[-d.rows,],cbind(new.data,new.redds))
+    }
   }
-
   # carry over any covariates
   var.col<-names(shape.edges)[names(shape.edges)%in%c("from","to","Reach","geometry")==F]
   reach.match<-match(out.data$Reach,shape.edges$Reach)
@@ -1986,7 +2097,6 @@ AssembleReddData<-function(shape,                  # shape or network organized 
 
   return(out.data)
 }
-
 
 #' Converts river measures and Lon/Lat coordinates
 #'
@@ -2047,4 +2157,81 @@ RiverMeasureLL<-function(shape,measures,points,crs){
                                           Eastings=coordsepgs[,1],Northings=coordsepgs[,2]))
   return(points.sf2)
 }
+
+
+
+#' Crop an sf shape - A graphical wrapper for the st_crop function
+#'
+#' @param shape A sf object
+#' @param guides Any sf object you would like highlighted to help make your selections
+#'
+#' @return
+#' @export
+#'
+#' @examples
+CropArea<-function(shape,guides){
+
+  if(inherits(shape,"sfnetwork")){
+    shape2<-sf::st_as_sf(sfnetworks::activate(shape,"edges"))
+    makenet<-T
+  }else{
+    shape2<-shape
+    makenet<-F
+  }
+
+  start<-as.numeric(sf::st_bbox(shape2))
+  start2<-as.numeric(sf::st_bbox(sf::st_transform(shape2,crs="wgs84")))
+  if(missing(guides)){guides<-list()}
+  if(inherits(guides,"list")==F){stop("Guides argument must be a list")}
+
+  map<-ggplot2::ggplot()+ggplot2::geom_sf(data=st_geometry(shape2))
+  if(length(guides)>0){
+    for(i in 1:length(guides)){
+      highlight<-sf::st_transform(guides[[i]],crs="wgs84")
+      map<-map+ggplot2::geom_sf(data=highlight,col=(2:7)[i])
+    }
+  }
+  map<-map+ggplot2::coord_sf(xlim=start[c(1,3)],ylim=start[c(2,4)])
+  print(map)
+
+  print("Please input new coordinates for the bounding box; entering a blank will keep the current setting")
+  xmin<-as.numeric(readline(prompt = "Minimum Longitude ="))
+  xmax<-as.numeric(readline(prompt = "Maximum Longitude ="))
+  ymin<-as.numeric(readline(prompt = "Minimum Latitude ="))
+  ymax<-as.numeric(readline(prompt = "Maximum Latitude ="))
+
+  if(is.na(xmin)){xmin<-start2[1]}
+  if(is.na(xmax)){xmax<-start2[3]}
+  if(is.na(ymin)){ymin<-start2[2]}
+  if(is.na(ymax)){ymax<-start2[4]}
+
+  bound.points0<-sf::st_as_sf(data.frame(x=c(xmin,xmax),y=c(ymin,ymax)),coords=1:2,crs="wgs84")
+  bound.points<-sf::st_transform(bound.points0,crs=sf::st_crs(shape2))
+
+  new.bounds<-as.numeric(sf::st_bbox(bound.points))
+
+  new.shape<-sf::st_crop(shape2,bound.points)
+  newmap<-ggplot2::ggplot()+ggplot2::geom_sf(data=new.shape)
+  if(length(guides)>0){
+    for(i in 1:length(guides)){
+      highlight<-sf::st_transform(guides[[i]],crs="wgs84")
+      newmap<-newmap+ggplot2::geom_sf(data=highlight,col=(2:7)[i])
+    }
+  }
+  newmap<-newmap+ggplot2::coord_sf(xlim=new.bounds[c(1,3)],ylim=new.bounds[c(2,4)])
+  print(newmap)
+
+  # Sometimes this process breaks the geometries, so put in a step to try and fix
+  broke<-which(sf::st_geometry_type(new.shape)!="LINESTRING")
+  out.shape.ok<-new.shape[-broke,]
+  fixed<-st_cast(new.shape[broke,],"LINESTRING")
+  out.shape<-rbind(out.shape.ok,fixed)
+
+  if(makenet){
+    out.shape<-sfnetworks::as_sfnetwork(out.shape)
+  }
+
+  return(out.shape)
+}
+
 
