@@ -4,7 +4,14 @@
 \alias{plotStream}
 \title{Makes a line plot that shows tributaries by stream distance}
 \usage{
-plotStream(streamvast, plotvar, streamname, usepreds, main = NA)
+plotStream(
+  streamvast,
+  plotvar,
+  streamname,
+  usepreds,
+  title,
+  show.names = "all"
+)
 }
 \arguments{
 \item{streamvast}{a streamvast object with predictions or evaluations}
@@ -15,7 +22,9 @@ plotStream(streamvast, plotvar, streamname, usepreds, main = NA)
 
 \item{usepreds}{logical, should the prediction or evaluation data be used, if absent, the function will search}
 
-\item{main}{the name of the mainstem or most important stream, which will be highlighted}
+\item{title}{a title to display above the graph}
+
+\item{show.names}{}
 }
 \value{
 A plot of the variable with respect ot stream distance

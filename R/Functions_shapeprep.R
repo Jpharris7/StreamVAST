@@ -436,7 +436,7 @@ LocateFeature<-function(shape,type){
 #' @param shape A sf or sfnetworks object to be editted
 #' @param root A sf POINT for the root (might be obsolete)
 #'
-#' @return
+#' @return A sf or sfnetworks object with the user specificed alterations
 #' @export
 #'
 #' @examples
@@ -2165,7 +2165,7 @@ RiverMeasureLL<-function(shape,measures,points,crs){
 #' @param shape A sf object
 #' @param guides Any sf object you would like highlighted to help make your selections
 #'
-#' @return
+#' @return A sf object cropped to the user inputs
 #' @export
 #'
 #' @examples

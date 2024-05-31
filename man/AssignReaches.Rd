@@ -4,14 +4,16 @@
 \alias{AssignReaches}
 \title{Divide a network into reaches}
 \usage{
-AssignReaches(network, targetsize = 100, habitat)
+AssignReaches(network, targetsize = NA, habitat, setnodes)
 }
 \arguments{
 \item{network}{A sfnetwork}
 
-\item{targetsize}{a desired size to use for reaches}
+\item{targetsize}{a desired size to use for reaches, set to NA to use only set nodes}
 
 \item{habitat}{a logical vector that identifies areas of habitat (T) vs non-habitat (F)}
+
+\item{setnodes}{A sf POINTS object that contains nodes to add to the shape}
 }
 \value{
 A new sfnetwork object divided into reaches of approximately the correct size

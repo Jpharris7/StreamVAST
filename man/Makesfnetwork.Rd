@@ -4,12 +4,14 @@
 \alias{Makesfnetwork}
 \title{Make a sf network}
 \usage{
-Makesfnetwork(shape, attach.data = T)
+Makesfnetwork(shape, attach.data = F, simple = T)
 }
 \arguments{
 \item{shape}{An sf object with LINESTRING or MULTILINESTRING geometry}
 
 \item{attach.data}{Logical, whether data fields should be preserved}
+
+\item{simple}{Logical, whether to use the fast and simple method, or the slower more thorough method}
 }
 \value{
 A sfnetwork object

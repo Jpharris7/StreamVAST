@@ -14,7 +14,8 @@ plotPredictionMap(
   make.labels = F,
   xaxis.breaks = NA,
   yaxis.breaks = NA,
-  palette = "turbo"
+  palette = "turbo",
+  max = Inf
 )
 }
 \arguments{

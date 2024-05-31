@@ -4,12 +4,14 @@
 \alias{RootNetwork}
 \title{Adds or changes the root of a network}
 \usage{
-RootNetwork(network, root, tolerance = Inf)
+RootNetwork(network, root, root.crs, tolerance = Inf)
 }
 \arguments{
 \item{network}{A sfnetwork}
 
 \item{root}{A sf point, or coordinates for the new root}
+
+\item{root.crs}{a crs or string for the root, if it is different from the network}
 
 \item{tolerance}{A distance that determines whether to use existing nodes or blend in a new one}
 }

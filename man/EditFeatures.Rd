@@ -11,6 +11,9 @@ EditFeatures(shape, root)
 
 \item{root}{A sf POINT for the root (might be obsolete)}
 }
+\value{
+A sf or sfnetworks object with the user specificed alterations
+}
 \description{
 Allows the user to add points or remove features by selecting them from the plot window
 and command line prompts

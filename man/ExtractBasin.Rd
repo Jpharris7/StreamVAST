@@ -4,7 +4,16 @@
 \alias{ExtractBasin}
 \title{Extracts a basin or subbasin}
 \usage{
-ExtractBasin(shape, root, basins, exclude, extract.inner = F)
+ExtractBasin(
+  shape,
+  root,
+  basins,
+  exclude,
+  extract.inner = F,
+  attach.data = T,
+  upper,
+  upper.crs
+)
 }
 \arguments{
 \item{shape}{an sf object consisting of linestrings (not multilinestrings!)}
@@ -16,6 +25,12 @@ ExtractBasin(shape, root, basins, exclude, extract.inner = F)
 \item{exclude}{vector indexes to be dropped, will attempt to match a single name}
 
 \item{extract.inner}{logical; should nodes that are in between the basins and the root be extracted}
+
+\item{attach.data}{logical; should old data fields be obtained; time consuming}
+
+\item{upper}{a point or points to stop the extraction}
+
+\item{upper.crs}{a crs string for the upper point, if different from shape}
 }
 \value{
 A sfnetwork containing the specified subbasins

@@ -4,15 +4,7 @@
 \alias{RunVAST}
 \title{Title}
 \usage{
-RunVAST(
-  streamvast,
-  vastsettings,
-  covariatedata,
-  covform.list,
-  optimize = T,
-  compute.stats = F,
-  maxiter = 3
-)
+RunVAST(streamvast, vastsettings, optimize = T, maxiter = 3, startpar)
 }
 \arguments{
 \item{streamvast}{a streamvast object with a defined temporal frame}

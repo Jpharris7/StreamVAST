@@ -991,7 +991,7 @@ VASTpreds<-function(streamvast){
 #' @param plotvar the column name in data to be plotted
 #' @param streamname the column name in the reaches with the stream name
 #' @param usepreds logical, should the prediction or evaluation data be used, if absent, the function will search
-#' @param title
+#' @param title a title to display above the graph
 #' @param show.names
 #'
 #' @return A plot of the variable with respect ot stream distance
