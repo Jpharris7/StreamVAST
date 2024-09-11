@@ -56,7 +56,6 @@ ConstructStreamVAST<-function(countdata,reachdata,surveydata,
     names(countdata)[names(countdata)=="parent.distance"]<-"prnt_ds"
     }
 
-
   # Calculate some values that aren't in the data already
   reachdata$Length<-as.numeric(sf::st_length(reachdata))*unitconv  # convert feet to km
   countdata$Area<-reachdata$Length[countdata[,reachname]]
@@ -358,7 +357,7 @@ SetTemporalFrame<-function(streamvast,startdate=NA,enddate=NA,padzero=T,Time="Ye
   names(checklist)[ncol(checklist)]<-Time
 
   missing.vec<-!apply(checklist[,1:2],MARGIN = 1,FUN=function(x){return(any(out.data$Time==x[1] &
-                                                                              out.data$Reach==x[2]))})
+                                                                              out.data$vastid==x[2]))})
 
   missing.data<-data.frame(Time=checklist$Time[missing.vec],
                            Year=checklist$Year[missing.vec],
@@ -1148,7 +1147,7 @@ plotPredictionMap<-function(streamvast,mapvar="Density",facet=NA,FUN="mean",back
   FUN.name<-mapvar
   if(FUN=="mean"){FUN.name<-paste0("Mean ",mapvar)}
   if(FUN=="var"){FUN.name<-paste0(mapvar, " Variance")}
-  if(mapvar=="Density"){FUN.name<-paste0(FUN.name,"\n (Redds/km)")}
+  if(mapvar=="Density"){FUN.name<-paste0(FUN.name,"\n (",streamvast$countname,"/km)")}
   if(mapvar=="Density_stdev"){FUN.name<-"Mean Standard\nDeviation in Density"}
 
   if(missing(background)){
