@@ -1118,6 +1118,10 @@ AttachData<-function(shape,
     transfer.names<-ref.names[tolower(ref.names)%in%tolower(shape.names)==F & ref.names!=sf.name]
   }else{
     transfer.names<-fields
+    if(any(fields%in%ref.names==F)){
+      badnames<-fields[fields%in%ref.names==F]
+      stop(paste0("Column names not found: ",paste(badnames,collapse = ", ")))
+    }
   }
 
   transfer.mat<-matrix(ncol=length(transfer.names),nrow=nrow(shape.sf),data=NA)
@@ -1133,7 +1137,6 @@ AttachData<-function(shape,
   pb<-utils::txtProgressBar(min = 0, max = nrow(shape.sf), initial = 0, style=3)
   # start by pulling out each feature
   for(i in 1:nrow(shape.sf)){
-
     shape.points<-sf::st_as_sf(as.data.frame(sf::st_coordinates(shape.sf[i,])[,1:2]),
                                coords=1:2,crs=sf::st_crs(shape))
 
@@ -1145,9 +1148,6 @@ AttachData<-function(shape,
 
     start.min<-min(start.dists)
     end.min<-min(end.dists)
-
-    start.check<-sum(start.dists==start.min)
-    end.check<-sum(end.dists==end.min)
 
     if(start.min<=tolerance & end.min<=tolerance){
       start.feature<-which(start.dists==start.min,)
@@ -1187,13 +1187,26 @@ AttachData<-function(shape,
         transfer.dat[i,number.names]<-apply(X=as.data.frame(number.data)*use.wgt,FUN="sum",MARGIN=2)
       }
 
-      # characters and factors are concatenated
+      # characters and factors are concatenated, depending on weight
+      # Have tried to handle a variety of error types
       if(length(char.names)>0){
         char.data<-as.data.frame(as.data.frame(refshape.sf)[all.features,char.names])
-        char.data<-as.data.frame(char.data[which(use.wgt>=.25),])
+        char.data$use.wgt<-use.wgt
+        out.char<-vector(length = length(char.names))
 
-        transfer.dat[i,char.names]<-apply(X=char.data,MARGIN=2,
-                                          FUN=function(x){return(paste(unique(as.character(x)),collapse = "*"))})
+        # determine if characters are unique
+        for(j in 1:length(char.names)){
+          unique.char<-unique(char.data[,j])
+
+          if(length(unique.char)==0){unique.char<-NA}
+          if(length(unique.char)==1){
+            out.char<-unique.char
+          }else{
+            char.wgts<-aggregate(char.data$use.wgt,by=list(as.factor(char.data[,j])),FUN=sum)
+            out.char<-paste(char.wgts$Group.1[char.wgts$x>=.25],collapse = "*")
+          }
+          transfer.dat[i,char.names[j]]<-out.char
+        }
       }
       #untested : logical values are true only if the entire reach is true
       if(length(logic.names)>0){
@@ -1310,7 +1323,7 @@ PruneNetwork<-function(network,root,exclude,match,tolerance=100,plot=T){
   # this section prunes based on an sf object
   if(match.class=="sf"){
     if(any(sf::st_geometry_type(match)%in%c("POINT","LINESTRING")==F)){stop("Invalid geometry type in match argument")}
-    if(length(unique(sf::st_geometry_type(match)))>1){stop("Multiple geometry types in match argument")}
+    #if(any(sf::st_geometry_type(match)))){stop("Multiple geometry types in match argument")}
 
     network2<-Makesfnetwork(good.edges1,attach.data = F)
     network2<-RootNetwork(network2,root = root.sf)
@@ -1318,18 +1331,38 @@ PruneNetwork<-function(network,root,exclude,match,tolerance=100,plot=T){
     network.nodes2<-sf::st_as_sf(sfnetworks::activate(network2,"nodes"))
     network.points<-sf::st_sf(sf::st_cast(sf::st_geometry(network.edges2),"POINT"))
 
-    # start by looking for endpoints
-    if(sf::st_geometry_type(match)[1]=="POINT"){
-      net.points0<-network.points[sf::st_nearest_feature(x = match,network.points),]
-      net.points<-net.points0[as.numeric(sf::st_distance(match,net.points0,by_element = T))<=tolerance,]
-    }
-    if(sf::st_geometry_type(match)[1]=="LINESTRING"){
-      coords<-unique(sf::st_coordinates(match)[,1:2])
-      coords.sf<-sf::st_as_sf(as.data.frame(coords),coords=1:2,crs=sf::st_crs(network))
+    # Let's generalize it to handle geometry collections
+    for(i in 1:nrow(match)){
 
-      net.points0<-network.points[sf::st_nearest_feature(x = coords.sf,network.points),]
-      net.points<-net.points0[as.numeric(sf::st_distance(x=coords.sf,y=net.points0,by_element = T))<=tolerance,]
+      # turn each feature into an endpoint
+      if(sf::st_geometry_type(match)[i]=="POINT"){
+        net.pts0<-network.points[sf::st_nearest_feature(x = match[i,],network.points),]
+        net.pts<-net.pts0[as.numeric(sf::st_distance(match[i,],net.pts0,by_element = T))<=tolerance,]
+      }
+      if(sf::st_geometry_type(match)[i]=="LINESTRING"){
+        coords<-unique(sf::st_coordinates(match[i,])[,1:2])
+        coords.sf<-sf::st_as_sf(as.data.frame(coords),coords=1:2,crs=sf::st_crs(network))
+
+        net.pts0<-network.points[sf::st_nearest_feature(x = coords.sf,network.points),]
+        net.pts<-net.pts0[as.numeric(sf::st_distance(x=coords.sf,y=net.pts0,by_element = T))<=tolerance,]
+      }
+
+      if(i==1){net.points<-net.pts}
+      if(i>1){net.points<-rbind(net.points,net.pts)}
     }
+
+    # # start by looking for endpoints
+    # if(sf::st_geometry_type(match)[1]=="POINT"){
+    #   net.points0<-network.points[sf::st_nearest_feature(x = match,network.points),]
+    #   net.points<-net.points0[as.numeric(sf::st_distance(match,net.points0,by_element = T))<=tolerance,]
+    # }
+    # if(sf::st_geometry_type(match)[1]=="LINESTRING"){
+    #   coords<-unique(sf::st_coordinates(match)[,1:2])
+    #   coords.sf<-sf::st_as_sf(as.data.frame(coords),coords=1:2,crs=sf::st_crs(network))
+    #
+    #   net.points0<-network.points[sf::st_nearest_feature(x = coords.sf,network.points),]
+    #   net.points<-net.points0[as.numeric(sf::st_distance(x=coords.sf,y=net.points0,by_element = T))<=tolerance,]
+    # }
 
     # now that we have endpoints, we'll start by making a new network and blending the points in
     blend.points<-unique(sf::st_as_sf(c(sf::st_geometry(net.points),sf::st_geometry(network.nodes2))))
@@ -1593,7 +1626,7 @@ MakeSurveyTracks<-function(shape, surveys,surveys.crs="wgs84",save.col="all",
     shape.edges<-sf::st_as_sf(sfnetworks::activate(shape,"edges"))
   }else{
     shape.net<-Makesfnetwork(shape,attach.data=F)
-    shape.edges<-shape
+    shape.edges<-sf::st_as_sf(shape)
   }
 
   if(save.col[1]=="all"){
@@ -1980,10 +2013,10 @@ AssembleReddData<-function(shape,                 # shape or network organized i
       active.survey<-good.surveys[has.redds[i],]
       redds<-as.data.frame(active.survey)[,survey.redds]
 
-      if(nrow(georedds.sf3)>0){
+      if(inherits(georedds.sf3,"sf")){
         accounted.for<-georedds.sf3[georedds.sf3$tempID==active.survey$tempID,]
       }else{
-        accounted.for<-0
+        accounted.for<-data.frame(x=vector())
       }
 
       no.unaccounted<-redds-nrow(accounted.for)
@@ -2169,7 +2202,7 @@ RiverMeasureLL<-function(shape,measures,points,crs){
 #' @export
 #'
 #' @examples
-CropArea<-function(shape,guides){
+CropArea<-function(shape,guides,xmin,xmax,ymin,ymax){
 
   if(inherits(shape,"sfnetwork")){
     shape2<-sf::st_as_sf(sfnetworks::activate(shape,"edges"))
@@ -2184,21 +2217,22 @@ CropArea<-function(shape,guides){
   if(missing(guides)){guides<-list()}
   if(inherits(guides,"list")==F){stop("Guides argument must be a list")}
 
-  map<-ggplot2::ggplot()+ggplot2::geom_sf(data=st_geometry(shape2))
-  if(length(guides)>0){
-    for(i in 1:length(guides)){
-      highlight<-sf::st_transform(guides[[i]],crs="wgs84")
-      map<-map+ggplot2::geom_sf(data=highlight,col=(2:7)[i])
+  if(any(c(missing(xmin),missing(xmax),missing(ymin),missing(ymax)))){
+    map<-ggplot2::ggplot()+ggplot2::geom_sf(data=st_geometry(shape2))
+    if(length(guides)>0){
+      for(i in 1:length(guides)){
+        highlight<-sf::st_transform(guides[[i]],crs="wgs84")
+        map<-map+ggplot2::geom_sf(data=highlight,col=(2:7)[i])
+      }
     }
+    map<-map+ggplot2::coord_sf(xlim=start[c(1,3)],ylim=start[c(2,4)])
+    print(map)
   }
-  map<-map+ggplot2::coord_sf(xlim=start[c(1,3)],ylim=start[c(2,4)])
-  print(map)
-
   print("Please input new coordinates for the bounding box; entering a blank will keep the current setting")
-  xmin<-as.numeric(readline(prompt = "Minimum Longitude ="))
-  xmax<-as.numeric(readline(prompt = "Maximum Longitude ="))
-  ymin<-as.numeric(readline(prompt = "Minimum Latitude ="))
-  ymax<-as.numeric(readline(prompt = "Maximum Latitude ="))
+  if(missing(xmin)){xmin<-as.numeric(readline(prompt = "Minimum Longitude ="))}
+  if(missing(xmax)){xmax<-as.numeric(readline(prompt = "Maximum Longitude ="))}
+  if(missing(ymin)){ymin<-as.numeric(readline(prompt = "Minimum Latitude ="))}
+  if(missing(ymax)){ymax<-as.numeric(readline(prompt = "Maximum Latitude ="))}
 
   if(is.na(xmin)){xmin<-start2[1]}
   if(is.na(xmax)){xmax<-start2[3]}
@@ -2223,9 +2257,13 @@ CropArea<-function(shape,guides){
 
   # Sometimes this process breaks the geometries, so put in a step to try and fix
   broke<-which(sf::st_geometry_type(new.shape)!="LINESTRING")
-  out.shape.ok<-new.shape[-broke,]
-  fixed<-st_cast(new.shape[broke,],"LINESTRING")
-  out.shape<-rbind(out.shape.ok,fixed)
+  if(length(broke)>0){
+    out.shape.ok<-new.shape[-broke,]
+    fixed<-st_cast(new.shape[broke,],"LINESTRING")
+    out.shape<-rbind(out.shape.ok,fixed)
+  }else{
+    out.shape<-new.shape
+  }
 
   if(makenet){
     out.shape<-sfnetworks::as_sfnetwork(out.shape)
