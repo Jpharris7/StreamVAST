@@ -4,7 +4,7 @@
 \alias{CropArea}
 \title{Crop an sf shape - A graphical wrapper for the st_crop function}
 \usage{
-CropArea(shape, guides)
+CropArea(shape, guides, xmin, xmax, ymin, ymax)
 }
 \arguments{
 \item{shape}{A sf object}
