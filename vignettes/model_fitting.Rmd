@@ -148,7 +148,7 @@ plotPredictionMap(streamvast = Mill.vast,mapvar = "Density",
 These maps can also be faceted by year, month, etc.
 
 ```{r}
-plotPredictionMap(streamvast =Mill.vast, subset=Mill.vast$preds$Year%in%c(2014,2016,2018,2020), mapvar="Density",facet = "Year",make.labels = F,xaxis.breaks = 0,yaxis.breaks = 0)
+plotPredictionMap(streamvast =Mill.vast, subset=Mill.vast$preds$Year%in%c(2014,2016,2018,2020), mapvar="Density",facet = "Year",make.labels = F,xaxis.breaks = NA,yaxis.breaks = NA)
 ```
 
 Additional maps can be easily generated using generic plotting functions. For instance, the average density with respect to space is stored under the "spacedata" slot.
@@ -161,6 +161,7 @@ ggplot(data=Mill.vast$spacedata)+
   geom_line(aes(x=Reach,y=pDensity_lower),linetype=3)+theme_bw()
 
 ```
+
 Similarly, the pattern over time is stored in "timedata."
 
 ```{r}
@@ -175,3 +176,6 @@ ggplot(data=Mill.vast$timedata)+
 
 ```
 
+The easiest way to save a fitted model is as an RDS object.
+
+In the next chapter, we will discuss some additions and extensions of this model that can be used to generate escapement estimates for salmonid populations in the Pacific Northwest.

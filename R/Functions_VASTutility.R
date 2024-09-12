@@ -1168,12 +1168,14 @@ plotPredictionMap<-function(streamvast,mapvar="Density",facet=NA,FUN="mean",back
   if(is.na(xaxis.breaks[1])==F){
     map<-map+ggplot2::scale_x_continuous(breaks = xaxis.breaks,limits = sf::st_bbox(reachplot)[c(1,3)])
   }else{
-    map<-map+ggplot2::scale_x_continuous(limits = sf::st_bbox(reachplot)[c(1,3)])
+    map<-map+ggplot2::scale_x_continuous(limits = sf::st_bbox(reachplot)[c(1,3)])+
+      ggplot2::theme(axis.text.x = ggplot2::element_blank())
   }
   if(is.na(yaxis.breaks[1])==F){
     map<-map+ggplot2::scale_y_continuous(breaks = yaxis.breaks,limits = sf::st_bbox(reachplot)[c(2,4)])
   }else{
-    map<-map+ggplot2::scale_y_continuous(limits = sf::st_bbox(reachplot)[c(2,4)])
+    map<-map+ggplot2::scale_y_continuous(limits = sf::st_bbox(reachplot)[c(2,4)])+
+      ggplot2::theme(axis.text.y = ggplot2::element_blank())
   }
   if(make.labels){
     map<-map+ggplot2::geom_text(data=labeldat,ggplot2::aes(x=X,y=Y,label=labels),check_overlap = T)

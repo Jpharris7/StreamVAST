@@ -1,0 +1,114 @@
+---
+title: "Estimating Salmonid Escapement after Fitting a VAST model"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Estimating Salmonid Escapement after Fitting a VAST model}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup, warning=FALSE}
+library(StreamVAST)
+library(INLA)
+library(sf)
+library(ggplot2)
+library(gridExtra)
+Mill.vast<-readRDS("Mill_vastmodel.rds")
+```
+
+### Estimating Salmonid Escapement
+
+This project was originally designed to support salmonid population monitoring in the state of Washington, US. While the other chapters focus on more general applications, this chapter will cover methods that are more specific to the Pacific Northwest salmonid community.
+
+# From Redd Density to Fish Populations
+
+While in some cases it may be possible to directly model the number of unique redds, most spawning ground monitoring suffers from difficulties, interruptions, and lack of coverage that make this infeasible. Instead this method focuses on the "area under the curve" or AUC method (not to be confused with the "area under the receiver operating curve" metric which is sometimes abbreviated AUC). In this method, the predicted number of total (non-unique) redds is plotted over time. 
+
+```{r }
+dat1<-subset(Mill.vast$preds,Year==2015 & Reach==9)[,c("Redds","Day")]
+dat1$group<-"Predicted"
+dat2<-subset(Mill.vast$countdata,Year==2015 & Reach==9)[,c("Redds","Day")]
+dat2$group<-"Observed"
+
+ggplot(data=rbind(dat1,dat2))+
+  geom_point(aes(x=Day,y=Redds,col=group))+
+  geom_line(aes(x=Day,y=Redds,col=group))+
+  theme_bw()+theme(legend.title = element_blank())+
+  ggtitle("Year 2015 - Reach 9")
+
+```
+The area under the curve is calculated separately for each reach and year combination. The calculations were made in the previous chapter when using the VASTpreds function and can be accessed from the aucdata slot in the streamVAST object.
+
+```{r}
+head(summary(Mill.vast$aucdata$auctotals))
+```
+
+The area under the curve will be in units of Redds*Days. If we divide this number by the residence or survival time of redds, the result will be an estimate of the number of unique redds. This value can be obtained from expert opinion or the literature, but if repeated observations of redds are available it is not difficult to model.
+
+# Modeling Redd Survival
+
+```{r}
+Mill.redds.sf<-st_read(dsn="Mill_Creek_redds_example.shp")
+Mill.redds<-data.frame(as.data.frame(Mill.redds.sf)[,c("Year","rdd_nm_","srvy_dt","rdd_st_")],lon=st_coordinates(Mill.redds.sf)[,1],lat=st_coordinates(Mill.redds.sf)[,2])
+Mill.redds$srvy_dt<-sapply(Mill.redds$srvy_dt,FUN=function(x)return(strsplit(x,split=" ")[[1]][1]))
+
+Mill.redds$day<-as.integer(strftime(x=strptime(x=Mill.redds$srvy_dt,format="%m/%d/%Y"),format="%j"))
+head(Mill.redds)
+```
+First we recall the redd data from before and do some minor formatting. Each redd must have a date, a unique id number, and a set of coordinates. It must also have a status code that uses the "NR" for New Redds, "SV" for Still Visible redds that have been observed previously, and "NV" for Not Visible redds that were previously observed but are no longer identifiable.
+
+Next, the MakeReddSurvival function will process the data into a usable form. Because we have surveyed each reach multiple times, we can use the intervals between surveys and the redd status codes to determine a minimum and maximum survival time for each redd.
+
+```{r}
+Mill.survdata<-MakeReddSurvival(streamvast = Mill.vast,redds = Mill.redds,redd.ids = "rdd_nm_",
+                           redd.crs = 2286,redd.status = "rdd_st_",survey.tol = 250)
+head(Mill.survdata)
+```
+
+## INLA survival model
+
+For the survival model, we can use existing methods in INLA to fit a pretty good survival model without much difficulty. This model will use a simplified spatial graph that estimates spatial covariances based on adjacency as opposed to distance. A function has been included to conveniently generate the required matrix. 
+
+```{r}
+Mill.mat<-AdjacencyMatrix(Mill.vast$reachdata)
+```
+
+We will build the model in INLA directly. First, we will convert the data into a survival object. Using 'event' code 3 specifies that the data is interval censored to be between time and time2.
+
+Then the model itself is fit, with random walk effects on Year and a besag ICAR effect for space based on the adjaceny graph. The family can be either 'gamma.surv' or 'weibull.surv' and users are encouraged to experiment to find the distribution best for their data.
+```{r}
+Mill.inla.surv<-inla.surv(time=Mill.survdata$min.duration,event=rep(3,nrow(Mill.survdata)),time2 = Mill.survdata$max.duration)
+
+Mill.inla<-inla(Mill.inla.surv~f(Year,model="rw1")+f(Reach,model="besag",graph = Mill.mat),
+               data=Mill.survdata,family="gamma.surv",control.compute = list(waic=T))
+```
+The hyperparameter estimated in INLA is the shape parameter of the estimated gamma distribution. INLA uses a slightly unusual parameterization of the rate parameter. The SurvivalTable function converts the results of the model into tabular format with shape and scale parameters capable with the distribution functions (dgamma, etc.) in base R. From these distributions, we can compute the median survival time estimated for each year and reach.
+
+
+```{r}
+Mill.gamma.table<-SurvivalTable(model = Mill.inla)
+head(Mill.gamma.table)
+```
+The survival values can be plotted in a variety of ways and the plotSurvivalHistogram and plotSurvivalCurves functions will help.
+
+```{r warning=FALSE}
+plotSurvivalCurves(model = Mill.inla,data = Mill.survdata,
+                              title = "Mill Creek: Median Survival")+xlim(NA,80)
+```
+The final step is to match the predictions of survival time to the auc predictions. This is easily accomplished with the MakeEscapement function.
+
+```{r}
+Mill.escape<-MakeEscapement(streamvast = Mill.vast,survival = Mill.gamma.table)
+head(Mill.escape)
+```
+
+```{r}
+plotEscapement(Mill.escape)
+```

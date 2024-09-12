@@ -20,7 +20,7 @@ MakeReddSurvival<-function(streamvast,redds,redd.ids="redd_name_txt",redd.crs="w
                            survey.tol=250,redd.status="redd_status_code",min.surveys=1,
                            buffer=14){
 
-  reach.box<-sf::st_bbox(st_transform(streamvast$reachdata,crs="wgs84"))
+  reach.box<-sf::st_bbox(st_transform(streamvast$reachdata,crs=redd.crs))
   good.redds<-subset(redds,lon>=reach.box[1] & lon<=reach.box[3] &
                        lat>=reach.box[2] & lat<=reach.box[4])
   redd.names<-unique(good.redds[,redd.ids])
@@ -39,7 +39,7 @@ MakeReddSurvival<-function(streamvast,redds,redd.ids="redd_name_txt",redd.crs="w
   pb<-utils::txtProgressBar(min = 0, max = length(redd.names), initial = 0, style=3)
   for(i in 1:length(redd.names)){
 
-    r.data<-redds[redds$redd_name_txt==redd.names[i],]
+    r.data<-redds[redds[,redd.ids]==redd.names[i],]
 
     survival.data$Year[i]<-r.data$Year[1]
     survival.data$lon[i]<-r.data$lon[1]
@@ -49,7 +49,7 @@ MakeReddSurvival<-function(streamvast,redds,redd.ids="redd_name_txt",redd.crs="w
     if(sum(r.data[,redd.status]=="NR")==1 & sum(r.data[,redd.status]=="NV")<=1 &
        is.na(r.data$lon[1])==F){
 
-      redd.sf<-sf::st_as_sf(as.data.frame(survival.data[i,]),coords=c("lon","lat"),crs="wgs84")
+      redd.sf<-sf::st_as_sf(as.data.frame(survival.data[i,]),coords=c("lon","lat"),crs=redd.crs)
       redd.sf2<-sf::st_transform(redd.sf,crs=sf::st_crs(streamvast$reachdata))
       closest<-sf::st_nearest_feature(redd.sf2,streamvast$reachdata)
       survival.data$Reach[i]<-as.data.frame(streamvast$reachdata)[closest,streamvast$reachname]
@@ -165,11 +165,11 @@ SurvivalTable<-function(model,extrayears){
 
     if(fam=="gammasurv"){
       surv.table$Scale[i]<-exp(model$summary.fixed[1,1]+year.eff+reach.eff)/shape
-      surv.table$MedLife[i]<-stats::qgamma(.5,shape = shape,scale = surv.table$Scale[i])*30
+      surv.table$MedLife[i]<-stats::qgamma(.5,shape = shape,scale = surv.table$Scale[i])
     }
     if(fam=="weibullsurv"){
       surv.table$Scale[i]<-(1/(model$summary.fixed[1,1]+year.eff+reach.eff))^(1/shape)
-      surv.table$MedLife[i]<-stats::qweibull(.5,shape = shape,scale = surv.table$Scale[i])*30
+      surv.table$MedLife[i]<-stats::qweibull(.5,shape = shape,scale = surv.table$Scale[i])
     }
   }
 
@@ -191,8 +191,8 @@ SurvivalTable<-function(model,extrayears){
         extra.table$Scale[i]<-mean(surv.table$Scale[surv.table$Year%in%c(closest.left,closest.right) &
                                                       surv.table$Reach==extra.table$Reach[i]])
 
-        if(fam=="gammasurv"){extra.table$MedLife[i]<-stats::qgamma(.5,shape = shape,scale = extra.table$Scale[i])*30}
-        if(fam=="weibullsurv"){extra.table$MedLife[i]<-stats::qweibull(.5,shape = shape,scale = extra.table$Scale[i])*30}
+        if(fam=="gammasurv"){extra.table$MedLife[i]<-stats::qgamma(.5,shape = shape,scale = extra.table$Scale[i])}
+        if(fam=="weibullsurv"){extra.table$MedLife[i]<-stats::qweibull(.5,shape = shape,scale = extra.table$Scale[i])}
       }
       surv.table<-rbind(surv.table,extra.table)
     }else{
@@ -251,7 +251,7 @@ plotSurvivalCurves<-function(model,data,year="all",reach="all",title){
   gg.seg.table<-data.frame(Year=NA,Reach=NA, group=rep(1:nrow(surv.table),each=100),
                            Day=rep(1:100,times=nrow(surv.table)),Surv=NA)
   fam<-model$.args$family
-  xseq<-1:100/30
+  xseq<-1:100
 
   for(i in 1:nrow(surv.table)){
     start<-1+(100*(i-1))
@@ -282,13 +282,13 @@ plotSurvivalCurves<-function(model,data,year="all",reach="all",title){
   if(fam=="gammasurv"){
     out.plot<-out.plot+
       ggplot2::geom_line(data=data.frame(Day=stats::qgamma((0:100)/100,shape = model$summary.hyperpar[1,1],
-                                           scale = scale)*30,Surv=1-0:100/100),
+                                           scale = scale),Surv=1-0:100/100),
                          ggplot2::aes(x=Day,y=Surv),linewidth=1)+ggplot2::ylab("Survival")
   }
   if(fam=="weibullsurv"){
     out.plot<-out.plot+
       ggplot2::geom_line(data=data.frame(Day=stats::qweibull((0:100)/100,shape = model$summary.hyperpar[1,1],
-                                             scale = scale)*30,Surv=1-0:100/100),
+                                             scale = scale),Surv=1-0:100/100),
                 ggplot2::aes(x=Day,y=Surv),linewidth=1)+ggplot2::ylab("Survival")
   }
   if(missing(title)==F){
