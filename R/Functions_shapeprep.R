@@ -126,7 +126,7 @@ Makesfnetwork<-function(shape,attach.data=F,simple=T){
     for(i in 1:length(int.mat)){
 
       int.shapes<-shape.edges[int.mat[[i]],]
-      intersect.shapes<-st_as_sf(st_as_sfc(unique(sf::st_geometry(sf::st_intersection(int.shapes)))),crs=st_crs(shape))
+      intersect.shapes<-sf::st_as_sf(sf::st_as_sfc(unique(sf::st_geometry(sf::st_intersection(int.shapes)))),crs=sf::st_crs(shape))
 
       int.points0<-intersect.shapes[sf::st_geometry_type(intersect.shapes)=="POINT",]
       int.lines0<-intersect.shapes[sf::st_geometry_type(intersect.shapes)=="LINESTRING",]
@@ -712,8 +712,8 @@ AddFeatures<-function(network,nodes,edges,crs,tolerance=200,tolerance2=10){
         }
 
         #update the network
-        new.edges<-c(st_geometry(network.edges),sf::st_cast(sf::st_combine(sf::st_as_sf(line.dat2,coords=1:2,crs=crs)),"LINESTRING"))
-        network<-as_sfnetwork(new.edges)
+        new.edges<-c(sf::st_geometry(network.edges),sf::st_cast(sf::st_combine(sf::st_as_sf(line.dat2,coords=1:2,crs=crs)),"LINESTRING"))
+        network<-sfnetworks::as_sfnetwork(new.edges)
         network.edges<-sf::st_as_sf(sfnetworks::activate(network,"edges"))
         network.nodes<-sf::st_as_sf(sfnetworks::activate(network,"nodes"))
       }else{
@@ -965,10 +965,10 @@ ExtractBasin<-function(shape,root,basins,exclude,extract.inner=F,attach.data=T,u
     upper.points<-PointSetup(upper,crs=upper.crs)
     upper.points2<-sf::st_transform(x = upper.points,crs = sf::st_crs(shape))
 
-    shape.net2<-st_network_blend(x = shape.net2,y = upper.points2)
+    shape.net2<-sfnetworks::st_network_blend(x = shape.net2,y = upper.points2)
     shape.nodes<-sf::st_as_sf(sfnetworks::activate(shape.net2,'nodes'))
     shape.edges<-sf::st_as_sf(sfnetworks::activate(shape.net2,'edges'))
-    upper.index<-st_nearest_feature(x = upper.points2,y = shape.nodes)
+    upper.index<-sf::st_nearest_feature(x = upper.points2,y = shape.nodes)
     all.paths<-sfnetworks::st_network_paths(x = shape.net2,from = root.sf)
 
     drop.nodes.index<-which(unlist(lapply(all.paths[[1]],FUN=function(x){return(any(x%in%upper.index))})))
@@ -977,7 +977,7 @@ ExtractBasin<-function(shape,root,basins,exclude,extract.inner=F,attach.data=T,u
     drop.segs<-which(shape.edges$from%in%drop.nodes.index | shape.edges$to%in%drop.nodes.index)
 
     new.edges<-shape.edges[-drop.segs,]
-    shape.net2<-as_sfnetwork(new.edges)
+    shape.net2<-sfnetworks::as_sfnetwork(new.edges)
     shape.nodes<-sf::st_as_sf(sfnetworks::activate(shape.net2,'nodes'))
     shape.edges<-sf::st_as_sf(sfnetworks::activate(shape.net2,'edges'))
     root.node.index<-which.min(sf::st_distance(x=root.sf,y=shape.nodes))
@@ -1041,7 +1041,7 @@ ExtractBasin<-function(shape,root,basins,exclude,extract.inner=F,attach.data=T,u
     good.connect.nodes<-which(unlist(lapply(all.paths[[1]],FUN=function(x){
       conn<-x[which(x%in%c(inner.connect.nodes,b.roots.index))]
       if(length(conn)==0){return(FALSE)}
-      return(tail(conn,1)%in%b.roots.index==F)})))
+      return(utils::tail(conn,1)%in%b.roots.index==F)})))
 
     good.nodes.index<-unique(c(good.nodes.index,good.connect.nodes))
   }
@@ -1202,7 +1202,7 @@ AttachData<-function(shape,
           if(length(unique.char)==1){
             out.char<-unique.char
           }else{
-            char.wgts<-aggregate(char.data$use.wgt,by=list(as.factor(char.data[,j])),FUN=sum)
+            char.wgts<-stats::aggregate(char.data$use.wgt,by=list(as.factor(char.data[,j])),FUN=sum)
             out.char<-paste(char.wgts$Group.1[char.wgts$x>=.25],collapse = "*")
           }
           transfer.dat[i,char.names[j]]<-out.char
@@ -2218,7 +2218,7 @@ CropArea<-function(shape,guides,xmin,xmax,ymin,ymax){
   if(inherits(guides,"list")==F){stop("Guides argument must be a list")}
 
   if(any(c(missing(xmin),missing(xmax),missing(ymin),missing(ymax)))){
-    map<-ggplot2::ggplot()+ggplot2::geom_sf(data=st_geometry(shape2))
+    map<-ggplot2::ggplot()+ggplot2::geom_sf(data=sf::st_geometry(shape2))
     if(length(guides)>0){
       for(i in 1:length(guides)){
         highlight<-sf::st_transform(guides[[i]],crs="wgs84")
@@ -2259,7 +2259,7 @@ CropArea<-function(shape,guides,xmin,xmax,ymin,ymax){
   broke<-which(sf::st_geometry_type(new.shape)!="LINESTRING")
   if(length(broke)>0){
     out.shape.ok<-new.shape[-broke,]
-    fixed<-st_cast(new.shape[broke,],"LINESTRING")
+    fixed<-sf::st_cast(new.shape[broke,],"LINESTRING")
     out.shape<-rbind(out.shape.ok,fixed)
   }else{
     out.shape<-new.shape

@@ -127,7 +127,7 @@ ConstructStreamVAST<-function(countdata,reachdata,surveydata,
   if(any(countdata$habitat==F)){
     warning(paste("Removed ",sum(countdata$habitat==F)," count records in non-habitat areas"))
     print("Summary of excluded records")
-    print(head(subset(countdata,habitat==F)))
+    print(utils::head(subset(countdata,habitat==F)))
   }
   countdata<-subset(countdata,habitat==T)
 
@@ -291,8 +291,8 @@ SetTemporalFrame<-function(streamvast,startdate=NA,enddate=NA,padzero=T,Time="Ye
   if(padzero){
     if(tolower(Time)=="year"){stop("Padding with zeros doesn't make sense with an annual time scale")}
 
-    front.time<-aggregate(time.table$Time,by=list(time.table$Year),FUN=min)
-    back.time<-aggregate(time.table$Time,by=list(time.table$Year),FUN=max)
+    front.time<-stats::aggregate(time.table$Time,by=list(time.table$Year),FUN=min)
+    back.time<-stats::aggregate(time.table$Time,by=list(time.table$Year),FUN=max)
 
     # for each year, we check which reaches were sampled in the earliest and latest time frame for that year
     for(y in 1:nyears){
@@ -775,7 +775,7 @@ VASTpreds<-function(streamvast){
   }
   fit<<-streamvast$vastmodel
   dharmaRes <-summary(streamvast$vastmodel, what="residuals", type=1)
-  par(mfrow=c(1,1))
+  graphics::par(mfrow=c(1,1))
   rm(fit,envir = .GlobalEnv)
   if(had.fit){fit<<-name.nobody_would.ever_use}
 
@@ -956,10 +956,10 @@ VASTpreds<-function(streamvast){
       year.aucs<-apply(year.sim,MARGIN = 2,FUN = function(y){return(MESS::auc(x=day.vec,y=y))})
       year.obs.aucs<-apply(year.obs.sim,MARGIN = 2,FUN = function(y){return(MESS::auc(x=reach.obs$Day,y=y))})
 
-      aucdata$pAUC_lower[index]<-quantile(year.obs.aucs,probs = .05,na.rm=T)
-      aucdata$pAUC_upper[index]<-quantile(year.obs.aucs,probs = .95,na.rm=T)
-      aucdata$tAUC_lower[index]<-quantile(year.aucs,probs = .05,na.rm=T)
-      aucdata$tAUC_upper[index]<-quantile(year.aucs,probs = .95,na.rm=T)
+      aucdata$pAUC_lower[index]<-stats::quantile(year.obs.aucs,probs = .05,na.rm=T)
+      aucdata$pAUC_upper[index]<-stats::quantile(year.obs.aucs,probs = .95,na.rm=T)
+      aucdata$tAUC_lower[index]<-stats::quantile(year.aucs,probs = .05,na.rm=T)
+      aucdata$tAUC_upper[index]<-stats::quantile(year.aucs,probs = .95,na.rm=T)
 
       year.total.sim[r,]<-year.aucs
       year.total.sim.obs[r,]<-year.obs.aucs
@@ -968,10 +968,10 @@ VASTpreds<-function(streamvast){
     auctotals$pAUC[y]<-sum(aucdata$pAUC[aucdata$Year==active.year])
     auctotals$tAUC[y]<-sum(aucdata$tAUC[aucdata$Year==active.year])
 
-    auctotals$pAUC_lower[y]<-quantile(apply(year.total.sim.obs,MARGIN = 2,FUN = sum),probs=.05,na.rm=T)
-    auctotals$pAUC_upper[y]<-quantile(apply(year.total.sim.obs,MARGIN = 2,FUN = sum),probs=.95,na.rm=T)
-    auctotals$tAUC_lower[y]<-quantile(apply(year.total.sim,MARGIN = 2,FUN = sum),probs=.05,na.rm=T)
-    auctotals$tAUC_upper[y]<-quantile(apply(year.total.sim,MARGIN = 2,FUN = sum),probs=.95,na.rm=T)
+    auctotals$pAUC_lower[y]<-stats::quantile(apply(year.total.sim.obs,MARGIN = 2,FUN = sum),probs=.05,na.rm=T)
+    auctotals$pAUC_upper[y]<-stats::quantile(apply(year.total.sim.obs,MARGIN = 2,FUN = sum),probs=.95,na.rm=T)
+    auctotals$tAUC_lower[y]<-stats::quantile(apply(year.total.sim,MARGIN = 2,FUN = sum),probs=.05,na.rm=T)
+    auctotals$tAUC_upper[y]<-stats::quantile(apply(year.total.sim,MARGIN = 2,FUN = sum),probs=.95,na.rm=T)
   }
 
   streamvast$preds<-preddata
@@ -1050,7 +1050,7 @@ plotStream<-function(streamvast,plotvar,streamname,usepreds,title,show.names="al
     ggplot2::geom_point(data=subset(segdata,is.na(name)==F),
                         ggplot2::aes(x=dist,y=var,col=name),shape=16)+
     ggplot2::theme_bw()+ggplot2::theme(legend.title = ggplot2::element_blank())+
-    scale_color_viridis(discrete = T)+
+    ggplot2::scale_color_viridis(discrete = T)+
     ggplot2::xlab("Stream Distance (km)")+ggplot2::ylab(plotvar)
 
   if(missing(title)==F){outplot<-outplot+ggplot2::ggtitle(title)}
@@ -1208,17 +1208,17 @@ Dharmaplot<-function(streamvast,span=.1){
     start=bins[i]
     stop=bins[i+1]
     rank.picks<-which(good.ranks>start & good.ranks<=stop)
-    median.vec[i]<-median(good.resids[rank.picks])
+    median.vec[i]<-stats::median(good.resids[rank.picks])
   }
 
   pt.dat<-data.frame(x=good.ranks,y=good.resids)
-  line.dat<-data.frame(x=1:100/100, y=predict(loess(y~x,data=data.frame(x=1:100/100,y=median.vec),
+  line.dat<-data.frame(x=1:100/100, y=stats::predict(stats::loess(y~x,data=data.frame(x=1:100/100,y=median.vec),
                                                     span = span),newdata = data.frame(x=1:100/100)))
 
-  outplot<-ggplot()+geom_point(data=pt.dat,aes(x=x,y=y),alpha=.25)+
-    geom_line(data=line.dat,aes(x=x,y=y),col=2,linewidth=1.5)+
-    geom_hline(yintercept=c(.05,.25,.4,.5,.6,.75,.95),col=2,linetype=2)+
-    theme_bw()+xlab("Rank-transformed Predictions")+ylab("Scaled Residuals")
+  outplot<-ggplot2::ggplot()+ggplot2::geom_point(data=pt.dat,ggplot2::aes(x=x,y=y),alpha=.25)+
+    ggplot2::geom_line(data=line.dat,ggplot2::aes(x=x,y=y),col=2,linewidth=1.5)+
+    ggplot2::geom_hline(yintercept=c(.05,.25,.4,.5,.6,.75,.95),col=2,linetype=2)+
+    ggplot2::theme_bw()+ggplot2::xlab("Rank-transformed Predictions")+ggplot2::ylab("Scaled Residuals")
 
   return(outplot)
 }
