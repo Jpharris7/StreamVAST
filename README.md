@@ -22,5 +22,9 @@ This section is demonstrates how to format and clean a set of lines, convert it 
 
 ## Formating and Running VAST
 This section shows how to use the network and the associated data to produce a model using VAST functions, and provides some basic advice for choosing settings and other features. [Fitting a VAST Model](https://jpharris7.github.io/StreamVAST/articles/model_fitting.html)
-## Plots and outputs
-The tutorial for this section is under construction.
+
+## Survival Models and Salmonid Escapement Estimation
+The code and functions necessary to estimate redd survival and overall escapement are now ready and will be downloaded as part of the package. A tutorial for this section will be available soon.
+
+## Washington Region 5 (Lower Columbia River) Escapement Totals
+A webpage displaying graphs and tables for Region 5 Steelhead escapement 2005-2023 will be available soon. In the meantime, the raw results can be downloaded by locating the file "Region5_Steelhead_Escapement_2023.xlsx" from the file window above.
