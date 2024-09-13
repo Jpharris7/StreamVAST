@@ -26,7 +26,7 @@ ConstructStreamVAST(
 
 \item{reachname}{a column name from reachdata to use}
 
-\item{StreamVAST}{An StreamVAST object to append details}
+\item{unitconv}{a value to divide river lengths}
 }
 \value{
 A streamvast object with appropriate formatting

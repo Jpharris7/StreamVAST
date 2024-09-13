@@ -24,7 +24,7 @@ plotStream(
 
 \item{title}{a title to display above the graph}
 
-\item{show.names}{}
+\item{show.names}{character; a vector of names to highlight, useful for large watersheds}
 }
 \value{
 A plot of the variable with respect ot stream distance

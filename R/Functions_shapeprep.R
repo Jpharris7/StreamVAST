@@ -2196,6 +2196,10 @@ RiverMeasureLL<-function(shape,measures,points,crs){
 #' Crop an sf shape - A graphical wrapper for the st_crop function
 #'
 #' @param shape A sf object
+#' @param xmin  numeric; a minimum value for the left boundary
+#' @param xmax  numeric; a max value for the right boundary
+#' @param ymin  numeric; a minimum value for the bottom boundary
+#' @param ymax  numeric; a max value for the top boundary
 #' @param guides Any sf object you would like highlighted to help make your selections
 #'
 #' @return A sf object cropped to the user inputs

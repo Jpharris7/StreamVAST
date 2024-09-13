@@ -10,6 +10,14 @@ CropArea(shape, guides, xmin, xmax, ymin, ymax)
 \item{shape}{A sf object}
 
 \item{guides}{Any sf object you would like highlighted to help make your selections}
+
+\item{xmin}{numeric; a minimum value for the left boundary}
+
+\item{xmax}{numeric; a max value for the right boundary}
+
+\item{ymin}{numeric; a minimum value for the bottom boundary}
+
+\item{ymax}{numeric; a max value for the top boundary}
 }
 \value{
 A sf object cropped to the user inputs

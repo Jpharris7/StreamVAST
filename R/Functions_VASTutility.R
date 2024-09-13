@@ -4,12 +4,12 @@
 #' This function constructs objects with class "StreamVAST". Depending on the arguments supplied, it will either
 #' initialize the object from countdata and reachdata, or it will add details to an already defined StreamVAST object.
 #'
-#' @param StreamVAST An StreamVAST object to append details
 #' @param countdata A dataframe containing count data, such as outputed from AssembleReddData
 #' @param reachdata A sf object with data for reaches, such as from AssignReaches
 #' @param surveydata A optional data frame or sf object with survey information, such as from MakeSurveyTracks, doesn't do much right now
 #' @param countname A column name from countdata to use
 #' @param reachname a column name from reachdata to use
+#' @param unitconv a value to divide river lengths
 #'
 #' @return A streamvast object with appropriate formatting
 #' @export
@@ -381,7 +381,7 @@ SetTemporalFrame<-function(streamvast,startdate=NA,enddate=NA,padzero=T,Time="Ye
   out.data$Month<-factor(out.data$Month,levels = month.abb[min.month:max.month])
 
   # add a bit to determine which time frames are original
-  x<-aggregate(out.data$original[out.data$dummy==F],
+  x<-stats::aggregate(out.data$original[out.data$dummy==F],
                by=list(Time=out.data$Time[out.data$dummy==F]),FUN=max)
   time.table$Original<-F
   time.table$Original[time.table$Time%in%x$Time[which(x$x==1)]]<-T
@@ -559,6 +559,7 @@ SetVastCovariates<-function(streamvast,pform,dform,pconfig=NULL,dconfig=NULL,spc
 #' @param vastsettings     a list of settings for a vast model
 #' @param optimize         logical, should the algorthim run multiple models with varying settings
 #' @param maxiter          a maximum number of iterations to try before giving up
+#' @param startpar         a list of starting values for the fixed parameters
 #'
 #' @return A streamvast object with a fitted model attached
 #' @export
@@ -859,8 +860,8 @@ VASTpreds<-function(streamvast){
 
     # then total densities and counts
     spacedata$tDensity[spot]<-as.numeric(mean(streamvast$vastmodel$Report$D_gct[i,1,]))
-    spacedata$tDensity_lower[spot]<-quantile(apply(r.data,MARGIN=2,FUN=mean),prob=.05,na.rm=T)
-    spacedata$tDensity_upper[spot]<-quantile(apply(r.data,MARGIN=2,FUN=mean),prob=.95,na.rm=T)
+    spacedata$tDensity_lower[spot]<-stats::quantile(apply(r.data,MARGIN=2,FUN=mean),prob=.05,na.rm=T)
+    spacedata$tDensity_upper[spot]<-stats::quantile(apply(r.data,MARGIN=2,FUN=mean),prob=.95,na.rm=T)
 
     spacedata$tCount[spot]<-spacedata$tDensity[spot]*spacedata$Length[spot]
     spacedata$tCount_upper[spot]<-spacedata$tDensity_upper[spot]*spacedata$Length[spot]
@@ -907,12 +908,12 @@ VASTpreds<-function(streamvast){
     }
 
     timedata$tDensity[i]<-mean(streamvast$vastmodel$Report$D_gct[,1,i])
-    timedata$tDensity_lower[i]<-quantile(apply(t.data,MARGIN=2,FUN=mean),prob=.05,na.rm=T)
-    timedata$tDensity_upper[i]<-quantile(apply(t.data,MARGIN=2,FUN=mean),prob=.95,na.rm=T)
+    timedata$tDensity_lower[i]<-stats::quantile(apply(t.data,MARGIN=2,FUN=mean),prob=.05,na.rm=T)
+    timedata$tDensity_upper[i]<-stats::quantile(apply(t.data,MARGIN=2,FUN=mean),prob=.95,na.rm=T)
 
     timedata$tCount[i]<-as.numeric(mean(streamvast$vastmodel$Report$D_gct[,1,i]*habitat.reaches$Length))
-    timedata$tCount_lower[i]<-quantile(apply(t.data.count,MARGIN=2,FUN=mean),prob=.05,na.rm=T)
-    timedata$tCount_upper[i]<-quantile(apply(t.data.count,MARGIN=2,FUN=mean),prob=.95,na.rm=T)
+    timedata$tCount_lower[i]<-stats::quantile(apply(t.data.count,MARGIN=2,FUN=mean),prob=.05,na.rm=T)
+    timedata$tCount_upper[i]<-stats::quantile(apply(t.data.count,MARGIN=2,FUN=mean),prob=.95,na.rm=T)
   }
 
   names(timedata)[names(timedata)=="Count"]<-streamvast$countname
@@ -991,7 +992,7 @@ VASTpreds<-function(streamvast){
 #' @param streamname the column name in the reaches with the stream name
 #' @param usepreds logical, should the prediction or evaluation data be used, if absent, the function will search
 #' @param title a title to display above the graph
-#' @param show.names
+#' @param show.names character; a vector of names to highlight, useful for large watersheds
 #'
 #' @return A plot of the variable with respect ot stream distance
 #' @export
@@ -1061,15 +1062,17 @@ plotStream<-function(streamvast,plotvar,streamname,usepreds,title,show.names="al
 
 #' Maps, the desired data, with options for facetting
 #'
-#' @param streamvast a streamvast object with a prediction data frame
-#' @param mapvar the column in data to map
-#' @param facet a column to determine the facets, or a vector of values
-#' @param background a sf object to put in the background
-#' @param subset a logical vector indicating which pred values to use
-#' @param make.labels should the reaches be labelled, turn off for multiple years
+#' @param streamvast   a streamvast object with a prediction data frame
+#' @param mapvar       the column in data to map
+#' @param facet        a column to determine the facets, or a vector of values
+#' @param FUN          a function like mean or median to summarize data
+#' @param background   a sf object to put in the background
+#' @param subset       a logical vector indicating which pred values to use
+#' @param make.labels  should the reaches be labelled, turn off for multiple years
 #' @param xaxis.breaks Vector of x values for axis lines; useful to reduce crowding
 #' @param yaxis.breaks Vector of y values for axis lines; useful to reduce crowding
-#' @param palette a viridis color palette for plotting
+#' @param palette      a viridis color palette for plotting
+#' @param max          a maximum value to cap the scale; values above the max are set equal to the max
 #'
 #' @return A colored heatmap of the desired variable mapped over the stream network
 #' @export
