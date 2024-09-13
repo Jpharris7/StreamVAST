@@ -20,7 +20,7 @@ MakeReddSurvival<-function(streamvast,redds,redd.ids="redd_name_txt",redd.crs="w
                            survey.tol=250,redd.status="redd_status_code",min.surveys=1,
                            buffer=14){
 
-  reach.box<-sf::st_bbox(st_transform(streamvast$reachdata,crs=redd.crs))
+  reach.box<-sf::st_bbox(sf::st_transform(streamvast$reachdata,crs=redd.crs))
   good.redds<-subset(redds,lon>=reach.box[1] & lon<=reach.box[3] &
                        lat>=reach.box[2] & lat<=reach.box[4])
   redd.names<-unique(good.redds[,redd.ids])
@@ -109,7 +109,7 @@ MakeReddSurvival<-function(streamvast,redds,redd.ids="redd_name_txt",redd.crs="w
   survival.data$min.duration<-survival.data$min.end-survival.data$max.start
   survival.data$max.duration<-survival.data$max.end-survival.data$min.start
 
-  return(na.omit(survival.data))
+  return(stats::na.omit(survival.data))
 }
 
 
@@ -223,7 +223,7 @@ plotSurvivalHistogram<-function(table,year="all",reach="all",title){
 
   outplot<-ggplot2::ggplot()+
     ggplot2::geom_histogram(data = table,ggplot2::aes(MedLife),bins=20)+
-    ggplot2::geom_vline(xintercept=quantile(table$MedLife,probs=c(.05,.5,.95)),
+    ggplot2::geom_vline(xintercept=stats::quantile(table$MedLife,probs=c(.05,.5,.95)),
                col=2,linetype=c(3,2,3),linewidth=c(1,1.25,1))+ggplot2::xlab("Days")+
     ggplot2::theme_bw()
   if(missing(title)==F){

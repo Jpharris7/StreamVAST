@@ -19,6 +19,8 @@ Imports:
     DHARMa,
     graphics,
     sf,
+    MESS,
+    units,
     sfnetworks,
     lwgeom,
     ggplot2,

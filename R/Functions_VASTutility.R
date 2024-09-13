@@ -4,12 +4,12 @@
 #' This function constructs objects with class "StreamVAST". Depending on the arguments supplied, it will either
 #' initialize the object from countdata and reachdata, or it will add details to an already defined StreamVAST object.
 #'
-#' @param StreamVAST An StreamVAST object to append details
 #' @param countdata A dataframe containing count data, such as outputed from AssembleReddData
 #' @param reachdata A sf object with data for reaches, such as from AssignReaches
 #' @param surveydata A optional data frame or sf object with survey information, such as from MakeSurveyTracks, doesn't do much right now
 #' @param countname A column name from countdata to use
 #' @param reachname a column name from reachdata to use
+#' @param unitconv a value to divide river lengths
 #'
 #' @return A streamvast object with appropriate formatting
 #' @export
@@ -127,7 +127,7 @@ ConstructStreamVAST<-function(countdata,reachdata,surveydata,
   if(any(countdata$habitat==F)){
     warning(paste("Removed ",sum(countdata$habitat==F)," count records in non-habitat areas"))
     print("Summary of excluded records")
-    print(head(subset(countdata,habitat==F)))
+    print(utils::head(subset(countdata,habitat==F)))
   }
   countdata<-subset(countdata,habitat==T)
 
@@ -291,8 +291,8 @@ SetTemporalFrame<-function(streamvast,startdate=NA,enddate=NA,padzero=T,Time="Ye
   if(padzero){
     if(tolower(Time)=="year"){stop("Padding with zeros doesn't make sense with an annual time scale")}
 
-    front.time<-aggregate(time.table$Time,by=list(time.table$Year),FUN=min)
-    back.time<-aggregate(time.table$Time,by=list(time.table$Year),FUN=max)
+    front.time<-stats::aggregate(time.table$Time,by=list(time.table$Year),FUN=min)
+    back.time<-stats::aggregate(time.table$Time,by=list(time.table$Year),FUN=max)
 
     # for each year, we check which reaches were sampled in the earliest and latest time frame for that year
     for(y in 1:nyears){
@@ -381,7 +381,7 @@ SetTemporalFrame<-function(streamvast,startdate=NA,enddate=NA,padzero=T,Time="Ye
   out.data$Month<-factor(out.data$Month,levels = month.abb[min.month:max.month])
 
   # add a bit to determine which time frames are original
-  x<-aggregate(out.data$original[out.data$dummy==F],
+  x<-stats::aggregate(out.data$original[out.data$dummy==F],
                by=list(Time=out.data$Time[out.data$dummy==F]),FUN=max)
   time.table$Original<-F
   time.table$Original[time.table$Time%in%x$Time[which(x$x==1)]]<-T
@@ -559,6 +559,7 @@ SetVastCovariates<-function(streamvast,pform,dform,pconfig=NULL,dconfig=NULL,spc
 #' @param vastsettings     a list of settings for a vast model
 #' @param optimize         logical, should the algorthim run multiple models with varying settings
 #' @param maxiter          a maximum number of iterations to try before giving up
+#' @param startpar         a list of starting values for the fixed parameters
 #'
 #' @return A streamvast object with a fitted model attached
 #' @export
@@ -775,7 +776,7 @@ VASTpreds<-function(streamvast){
   }
   fit<<-streamvast$vastmodel
   dharmaRes <-summary(streamvast$vastmodel, what="residuals", type=1)
-  par(mfrow=c(1,1))
+  graphics::par(mfrow=c(1,1))
   rm(fit,envir = .GlobalEnv)
   if(had.fit){fit<<-name.nobody_would.ever_use}
 
@@ -859,8 +860,8 @@ VASTpreds<-function(streamvast){
 
     # then total densities and counts
     spacedata$tDensity[spot]<-as.numeric(mean(streamvast$vastmodel$Report$D_gct[i,1,]))
-    spacedata$tDensity_lower[spot]<-quantile(apply(r.data,MARGIN=2,FUN=mean),prob=.05,na.rm=T)
-    spacedata$tDensity_upper[spot]<-quantile(apply(r.data,MARGIN=2,FUN=mean),prob=.95,na.rm=T)
+    spacedata$tDensity_lower[spot]<-stats::quantile(apply(r.data,MARGIN=2,FUN=mean),prob=.05,na.rm=T)
+    spacedata$tDensity_upper[spot]<-stats::quantile(apply(r.data,MARGIN=2,FUN=mean),prob=.95,na.rm=T)
 
     spacedata$tCount[spot]<-spacedata$tDensity[spot]*spacedata$Length[spot]
     spacedata$tCount_upper[spot]<-spacedata$tDensity_upper[spot]*spacedata$Length[spot]
@@ -907,12 +908,12 @@ VASTpreds<-function(streamvast){
     }
 
     timedata$tDensity[i]<-mean(streamvast$vastmodel$Report$D_gct[,1,i])
-    timedata$tDensity_lower[i]<-quantile(apply(t.data,MARGIN=2,FUN=mean),prob=.05,na.rm=T)
-    timedata$tDensity_upper[i]<-quantile(apply(t.data,MARGIN=2,FUN=mean),prob=.95,na.rm=T)
+    timedata$tDensity_lower[i]<-stats::quantile(apply(t.data,MARGIN=2,FUN=mean),prob=.05,na.rm=T)
+    timedata$tDensity_upper[i]<-stats::quantile(apply(t.data,MARGIN=2,FUN=mean),prob=.95,na.rm=T)
 
     timedata$tCount[i]<-as.numeric(mean(streamvast$vastmodel$Report$D_gct[,1,i]*habitat.reaches$Length))
-    timedata$tCount_lower[i]<-quantile(apply(t.data.count,MARGIN=2,FUN=mean),prob=.05,na.rm=T)
-    timedata$tCount_upper[i]<-quantile(apply(t.data.count,MARGIN=2,FUN=mean),prob=.95,na.rm=T)
+    timedata$tCount_lower[i]<-stats::quantile(apply(t.data.count,MARGIN=2,FUN=mean),prob=.05,na.rm=T)
+    timedata$tCount_upper[i]<-stats::quantile(apply(t.data.count,MARGIN=2,FUN=mean),prob=.95,na.rm=T)
   }
 
   names(timedata)[names(timedata)=="Count"]<-streamvast$countname
@@ -956,10 +957,10 @@ VASTpreds<-function(streamvast){
       year.aucs<-apply(year.sim,MARGIN = 2,FUN = function(y){return(MESS::auc(x=day.vec,y=y))})
       year.obs.aucs<-apply(year.obs.sim,MARGIN = 2,FUN = function(y){return(MESS::auc(x=reach.obs$Day,y=y))})
 
-      aucdata$pAUC_lower[index]<-quantile(year.obs.aucs,probs = .05,na.rm=T)
-      aucdata$pAUC_upper[index]<-quantile(year.obs.aucs,probs = .95,na.rm=T)
-      aucdata$tAUC_lower[index]<-quantile(year.aucs,probs = .05,na.rm=T)
-      aucdata$tAUC_upper[index]<-quantile(year.aucs,probs = .95,na.rm=T)
+      aucdata$pAUC_lower[index]<-stats::quantile(year.obs.aucs,probs = .05,na.rm=T)
+      aucdata$pAUC_upper[index]<-stats::quantile(year.obs.aucs,probs = .95,na.rm=T)
+      aucdata$tAUC_lower[index]<-stats::quantile(year.aucs,probs = .05,na.rm=T)
+      aucdata$tAUC_upper[index]<-stats::quantile(year.aucs,probs = .95,na.rm=T)
 
       year.total.sim[r,]<-year.aucs
       year.total.sim.obs[r,]<-year.obs.aucs
@@ -968,10 +969,10 @@ VASTpreds<-function(streamvast){
     auctotals$pAUC[y]<-sum(aucdata$pAUC[aucdata$Year==active.year])
     auctotals$tAUC[y]<-sum(aucdata$tAUC[aucdata$Year==active.year])
 
-    auctotals$pAUC_lower[y]<-quantile(apply(year.total.sim.obs,MARGIN = 2,FUN = sum),probs=.05,na.rm=T)
-    auctotals$pAUC_upper[y]<-quantile(apply(year.total.sim.obs,MARGIN = 2,FUN = sum),probs=.95,na.rm=T)
-    auctotals$tAUC_lower[y]<-quantile(apply(year.total.sim,MARGIN = 2,FUN = sum),probs=.05,na.rm=T)
-    auctotals$tAUC_upper[y]<-quantile(apply(year.total.sim,MARGIN = 2,FUN = sum),probs=.95,na.rm=T)
+    auctotals$pAUC_lower[y]<-stats::quantile(apply(year.total.sim.obs,MARGIN = 2,FUN = sum),probs=.05,na.rm=T)
+    auctotals$pAUC_upper[y]<-stats::quantile(apply(year.total.sim.obs,MARGIN = 2,FUN = sum),probs=.95,na.rm=T)
+    auctotals$tAUC_lower[y]<-stats::quantile(apply(year.total.sim,MARGIN = 2,FUN = sum),probs=.05,na.rm=T)
+    auctotals$tAUC_upper[y]<-stats::quantile(apply(year.total.sim,MARGIN = 2,FUN = sum),probs=.95,na.rm=T)
   }
 
   streamvast$preds<-preddata
@@ -991,7 +992,7 @@ VASTpreds<-function(streamvast){
 #' @param streamname the column name in the reaches with the stream name
 #' @param usepreds logical, should the prediction or evaluation data be used, if absent, the function will search
 #' @param title a title to display above the graph
-#' @param show.names
+#' @param show.names character; a vector of names to highlight, useful for large watersheds
 #'
 #' @return A plot of the variable with respect ot stream distance
 #' @export
@@ -1050,7 +1051,7 @@ plotStream<-function(streamvast,plotvar,streamname,usepreds,title,show.names="al
     ggplot2::geom_point(data=subset(segdata,is.na(name)==F),
                         ggplot2::aes(x=dist,y=var,col=name),shape=16)+
     ggplot2::theme_bw()+ggplot2::theme(legend.title = ggplot2::element_blank())+
-    scale_color_viridis(discrete = T)+
+    ggplot2::scale_color_viridis(discrete = T)+
     ggplot2::xlab("Stream Distance (km)")+ggplot2::ylab(plotvar)
 
   if(missing(title)==F){outplot<-outplot+ggplot2::ggtitle(title)}
@@ -1061,15 +1062,17 @@ plotStream<-function(streamvast,plotvar,streamname,usepreds,title,show.names="al
 
 #' Maps, the desired data, with options for facetting
 #'
-#' @param streamvast a streamvast object with a prediction data frame
-#' @param mapvar the column in data to map
-#' @param facet a column to determine the facets, or a vector of values
-#' @param background a sf object to put in the background
-#' @param subset a logical vector indicating which pred values to use
-#' @param make.labels should the reaches be labelled, turn off for multiple years
+#' @param streamvast   a streamvast object with a prediction data frame
+#' @param mapvar       the column in data to map
+#' @param facet        a column to determine the facets, or a vector of values
+#' @param FUN          a function like mean or median to summarize data
+#' @param background   a sf object to put in the background
+#' @param subset       a logical vector indicating which pred values to use
+#' @param make.labels  should the reaches be labelled, turn off for multiple years
 #' @param xaxis.breaks Vector of x values for axis lines; useful to reduce crowding
 #' @param yaxis.breaks Vector of y values for axis lines; useful to reduce crowding
-#' @param palette a viridis color palette for plotting
+#' @param palette      a viridis color palette for plotting
+#' @param max          a maximum value to cap the scale; values above the max are set equal to the max
 #'
 #' @return A colored heatmap of the desired variable mapped over the stream network
 #' @export
@@ -1208,17 +1211,17 @@ Dharmaplot<-function(streamvast,span=.1){
     start=bins[i]
     stop=bins[i+1]
     rank.picks<-which(good.ranks>start & good.ranks<=stop)
-    median.vec[i]<-median(good.resids[rank.picks])
+    median.vec[i]<-stats::median(good.resids[rank.picks])
   }
 
   pt.dat<-data.frame(x=good.ranks,y=good.resids)
-  line.dat<-data.frame(x=1:100/100, y=predict(loess(y~x,data=data.frame(x=1:100/100,y=median.vec),
+  line.dat<-data.frame(x=1:100/100, y=stats::predict(stats::loess(y~x,data=data.frame(x=1:100/100,y=median.vec),
                                                     span = span),newdata = data.frame(x=1:100/100)))
 
-  outplot<-ggplot()+geom_point(data=pt.dat,aes(x=x,y=y),alpha=.25)+
-    geom_line(data=line.dat,aes(x=x,y=y),col=2,linewidth=1.5)+
-    geom_hline(yintercept=c(.05,.25,.4,.5,.6,.75,.95),col=2,linetype=2)+
-    theme_bw()+xlab("Rank-transformed Predictions")+ylab("Scaled Residuals")
+  outplot<-ggplot2::ggplot()+ggplot2::geom_point(data=pt.dat,ggplot2::aes(x=x,y=y),alpha=.25)+
+    ggplot2::geom_line(data=line.dat,ggplot2::aes(x=x,y=y),col=2,linewidth=1.5)+
+    ggplot2::geom_hline(yintercept=c(.05,.25,.4,.5,.6,.75,.95),col=2,linetype=2)+
+    ggplot2::theme_bw()+ggplot2::xlab("Rank-transformed Predictions")+ggplot2::ylab("Scaled Residuals")
 
   return(outplot)
 }

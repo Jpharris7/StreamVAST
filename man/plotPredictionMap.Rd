@@ -25,6 +25,8 @@ plotPredictionMap(
 
 \item{facet}{a column to determine the facets, or a vector of values}
 
+\item{FUN}{a function like mean or median to summarize data}
+
 \item{background}{a sf object to put in the background}
 
 \item{subset}{a logical vector indicating which pred values to use}
@@ -36,6 +38,8 @@ plotPredictionMap(
 \item{yaxis.breaks}{Vector of y values for axis lines; useful to reduce crowding}
 
 \item{palette}{a viridis color palette for plotting}
+
+\item{max}{a maximum value to cap the scale; values above the max are set equal to the max}
 }
 \value{
 A colored heatmap of the desired variable mapped over the stream network

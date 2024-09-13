@@ -14,6 +14,8 @@ RunVAST(streamvast, vastsettings, optimize = T, maxiter = 3, startpar)
 \item{optimize}{logical, should the algorthim run multiple models with varying settings}
 
 \item{maxiter}{a maximum number of iterations to try before giving up}
+
+\item{startpar}{a list of starting values for the fixed parameters}
 }
 \value{
 A streamvast object with a fitted model attached
