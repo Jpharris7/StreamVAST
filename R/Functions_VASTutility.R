@@ -402,10 +402,10 @@ SetTemporalFrame<-function(streamvast,startdate=NA,enddate=NA,Time="Year",
 #' time and space. It also samples and provides upper and lower bounds (90%)
 #'
 #' @param streamvast A VAST model object
-#' @param newdata description
-#' @param makeauc
-#' @param nsims description
-#' @param bias.correct description
+#' @param newdata a data frame with all necessary columns over which to make predictions
+#' @param makeauc logical; should auc measures be calculated. Can turn off to save time.
+#' @param nsims interger; a number of simulated draws to make from the joint posterior
+#' @param bias.correct logical; should the poisson transformation bias be corrected; very slow
 #'
 #' @return A streamvast object with a dataframe of predictions added
 #' @export

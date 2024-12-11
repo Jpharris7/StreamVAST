@@ -4,7 +4,14 @@
 \alias{MakeEscapement}
 \title{Make a table of escapement values based on the AUC method}
 \usage{
-MakeEscapement(streamvast, survival, fixed.survival = F, mult = 1.62)
+MakeEscapement(
+  streamvast,
+  survival,
+  fixed.survival = F,
+  mult = 1.62,
+  years = "all",
+  reaches = "all"
+)
 }
 \arguments{
 \item{streamvast}{a fitted streamvast object with auc predictions}

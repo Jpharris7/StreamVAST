@@ -16,6 +16,5 @@ A sfnetwork with some additional data attached
 }
 \description{
 this function checks that the direction of the stream network is away from the root
-and fixes any problems, also adds a column named "parent" to the shape and the distance
-from the midpoint of the parent to the midpoint of the child
+and fixes any problems, also adds a column named "parent" to the shape
 }

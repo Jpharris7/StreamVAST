@@ -8,8 +8,10 @@ SetTemporalFrame(
   streamvast,
   startdate = NA,
   enddate = NA,
-  padzero = T,
-  Time = "Year"
+  Time = "Year",
+  season,
+  padyear = F,
+  padhabitat = F
 )
 }
 \arguments{
@@ -19,9 +21,13 @@ SetTemporalFrame(
 
 \item{enddate}{dates to truncate or expand the data in yyyy-mm-dd format}
 
-\item{padzero}{should survey with zero observations be added at start/end dates}
-
 \item{Time}{character giving the timescale to use}
+
+\item{season}{a integer vector of length with order start Month, start day, end month, end day for a 'year' or 'season'}
+
+\item{padyear}{adds zeroes to the start and end of each runyear}
+
+\item{padhabiat}{adds zeros at regular intervals to areas designated non-habitat}
 }
 \value{
 A streamvast object with formated with the appropriate temporal frame

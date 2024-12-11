@@ -4,16 +4,16 @@
 \alias{plotEscapement}
 \title{Make a plot of yearly escapement values}
 \usage{
-plotEscapement(escape, obs.escape, title, plot = T)
+plotEscapement(streamvast, obs.escape, title, ribbons = NA, median = F)
 }
 \arguments{
-\item{escape}{A table of escapement values, usually from MakeEscapement}
-
 \item{obs.escape}{A vector of observed or reported escapement values; must be equal to the # of years in escape}
 
 \item{title}{character; a title to be passed to ggtitle}
 
-\item{plot}{logical; should the function return the plot, or just the data}
+\item{median}{should the plot show the predicted escapement based on the mle or the median of the posterior}
+
+\item{escape}{A table of escapement values, usually from MakeEscapement}
 }
 \value{
 either a ggplot object or a dataframe depending on the 'plot' option

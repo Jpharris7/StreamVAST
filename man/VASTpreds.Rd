@@ -4,10 +4,18 @@
 \alias{VASTpreds}
 \title{Get density predictions from a VAST model}
 \usage{
-VASTpreds(streamvast)
+VASTpreds(streamvast, newdata, makeauc = T, nsims = 100, bias.correct = F)
 }
 \arguments{
 \item{streamvast}{A VAST model object}
+
+\item{newdata}{a data frame with all necessary columns over which to make predictions}
+
+\item{makeauc}{logical; should auc measures be calculated. Can turn off to save time.}
+
+\item{nsims}{interger; a number of simulated draws to make from the joint posterior}
+
+\item{bias.correct}{logical; should the poisson transformation bias be corrected; very slow}
 }
 \value{
 A streamvast object with a dataframe of predictions added

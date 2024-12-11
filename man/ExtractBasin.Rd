@@ -12,7 +12,8 @@ ExtractBasin(
   extract.inner = F,
   attach.data = T,
   upper,
-  upper.crs
+  upper.crs,
+  root.tolerance = Inf
 )
 }
 \arguments{
@@ -31,6 +32,8 @@ ExtractBasin(
 \item{upper}{a point or points to stop the extraction}
 
 \item{upper.crs}{a crs string for the upper point, if different from shape}
+
+\item{root.tolerance}{a tolerance setting for the root. Low values will add the root to the network as a new node.}
 }
 \value{
 A sfnetwork containing the specified subbasins

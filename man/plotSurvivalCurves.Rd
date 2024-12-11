@@ -4,7 +4,7 @@
 \alias{plotSurvivalCurves}
 \title{Plot survival curves from a INLA survival model}
 \usage{
-plotSurvivalCurves(model, data, year = "all", reach = "all", title)
+plotSurvivalCurves(model, data, year = "all", reach = "all", title, mult = 1)
 }
 \arguments{
 \item{model}{a fitted INLA survival model}
@@ -16,6 +16,8 @@ plotSurvivalCurves(model, data, year = "all", reach = "all", title)
 \item{reach}{numeric; a subset of reach numbers to include in the plot}
 
 \item{title}{character; a title to pass to ggtitle()}
+
+\item{mult}{a numeric multiplier, used to backtransform values, if necessary}
 }
 \value{
 a ggplot showing the

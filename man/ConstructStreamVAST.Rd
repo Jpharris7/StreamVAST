@@ -6,14 +6,7 @@
 This function constructs objects with class "StreamVAST". Depending on the arguments supplied, it will either
 initialize the object from countdata and reachdata, or it will add details to an already defined StreamVAST object.}
 \usage{
-ConstructStreamVAST(
-  countdata,
-  reachdata,
-  surveydata,
-  countname,
-  reachname,
-  unitconv
-)
+ConstructStreamVAST(countdata, reachdata, surveydata, countname, reachname)
 }
 \arguments{
 \item{countdata}{A dataframe containing count data, such as outputed from AssembleReddData}

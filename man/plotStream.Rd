@@ -6,9 +6,10 @@
 \usage{
 plotStream(
   streamvast,
-  plotvar,
+  plotvar = "pred_Density",
+  ylab,
   streamname,
-  usepreds,
+  usepreds = T,
   title,
   show.names = "all"
 )
@@ -17,6 +18,8 @@ plotStream(
 \item{streamvast}{a streamvast object with predictions or evaluations}
 
 \item{plotvar}{the column name in data to be plotted}
+
+\item{ylab}{character, a label for the y axis}
 
 \item{streamname}{the column name in the reaches with the stream name}
 

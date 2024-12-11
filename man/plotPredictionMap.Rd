@@ -6,7 +6,7 @@
 \usage{
 plotPredictionMap(
   streamvast,
-  mapvar = "Density",
+  mapvar = "pred_Density",
   facet = NA,
   FUN = "mean",
   background,
@@ -15,6 +15,7 @@ plotPredictionMap(
   xaxis.breaks = NA,
   yaxis.breaks = NA,
   palette = "turbo",
+  legendname,
   max = Inf
 )
 }
@@ -38,6 +39,8 @@ plotPredictionMap(
 \item{yaxis.breaks}{Vector of y values for axis lines; useful to reduce crowding}
 
 \item{palette}{a viridis color palette for plotting}
+
+\item{legendname}{character; a name for the legend}
 
 \item{max}{a maximum value to cap the scale; values above the max are set equal to the max}
 }

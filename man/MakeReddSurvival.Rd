@@ -9,6 +9,7 @@ MakeReddSurvival(
   redds,
   redd.ids = "redd_name_txt",
   redd.crs = "wgs84",
+  redd.coords = c("lon", "lat"),
   survey.tol = 250,
   redd.status = "redd_status_code",
   min.surveys = 1,
@@ -23,6 +24,8 @@ MakeReddSurvival(
 \item{redd.ids}{character; the name of the column with consistent id for each read over time}
 
 \item{redd.crs}{a crs for the redds}
+
+\item{redd.coords}{A vector of length 2 with the names of the columns for longitude and latitude}
 
 \item{survey.tol}{numeric; a max tolerance for matching redds to survey lines}
 

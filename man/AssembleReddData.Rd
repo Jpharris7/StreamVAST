@@ -13,7 +13,8 @@ AssembleReddData(
   tolerance.redds = 250,
   tolerance.surveys = 10,
   surveys,
-  survey.redds = NA
+  survey.redds = NA,
+  dist.units
 )
 }
 \arguments{
@@ -34,6 +35,8 @@ AssembleReddData(
 \item{surveys}{A sf object with LINESTRINGs representing surveys}
 
 \item{survey.redds}{optional name of a column with survey counts}
+
+\item{dist.units}{a character string for the units}
 }
 \value{
 a dataframe with dates, counts, and effort for each surveyed location
@@ -42,4 +45,8 @@ a dataframe with dates, counts, and effort for each surveyed location
 This function takes an sfnetwork or sf shape, a set of surveys, and optionally a set of
 georeferenced redds observations, and returns a data set with the effort assigned to each reach
 and the count types associated with that observation date.
+}
+\details{
+Error Note: can cause reach numbers to be misassigned under some circumstances
+Need to investigate further and then fix. In meantime, always be sure to check outputs.
 }
