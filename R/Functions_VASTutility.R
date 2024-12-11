@@ -996,7 +996,6 @@ Dharmaplot<-function(streamvast,span=.1){
 #' @examples
 Jeremy_sample_variable<-function(obj,newdata,what="mu_g",n_samples=100,sample_fixed=TRUE,seed=123456,bias.correct=F){
 
-  require(Matrix)
   if (!("jointPrecision" %in% names(obj$sdrep))) {
     stop("jointPrecision not present in x$sdrep; please re-run with `getJointPrecision=TRUE`")
   }
