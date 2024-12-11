@@ -94,7 +94,7 @@ fit<- tinyVAST( data = Mill.vast$vastdata,
                 variable_column = "Species",
                 time_column = "Runyear",
                 distribution_column = "Dist",
-                #sem="",
+                sem="",
                 dsem = "Redds -> Redds, 1, rho",
                 family=poisson(),
                 control = tinyVASTcontrol(getJointPrecision = TRUE))

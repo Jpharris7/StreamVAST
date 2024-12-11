@@ -110,10 +110,10 @@ plotSurvivalCurves(model = Mill.inla,data = Mill.survdata,
 The final step is to match the predictions of survival time to the auc predictions. This is easily accomplished with the MakeEscapement function.
 
 ```{r}
-Mill.escape<-MakeEscapement(streamvast = Mill.vast,survival = Mill.gamma.table)
-head(Mill.escape)
+Mill.vast<-MakeEscapement(streamvast = Mill.vast,survival = Mill.gamma.table)
+head(Mill.vast)
 ```
 
 ```{r}
-plotEscapement(Mill.escape)
+plotEscapement(Mill.vast)
 ```
