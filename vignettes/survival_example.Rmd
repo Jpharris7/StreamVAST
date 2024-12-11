@@ -107,11 +107,11 @@ The survival values can be plotted in a variety of ways and the plotSurvivalHist
 plotSurvivalCurves(model = Mill.inla,data = Mill.survdata,
                               title = "Mill Creek: Median Survival")+xlim(NA,80)
 ```
-The final step is to match the predictions of survival time to the auc predictions. This is easily accomplished with the MakeEscapement function.
+The final step is to match the predictions of survival time to the auc predictions. This is easily accomplished with the MakeEscapement function. This will fill the "escapedata" slot of the streamvast object, and contains estimates of escapement by reach and year, as well as totals by year.
 
 ```{r}
 Mill.vast<-MakeEscapement(streamvast = Mill.vast,survival = Mill.gamma.table)
-head(Mill.vast)
+head(Mill.vast$escapedata$escapedata)
 ```
 
 ```{r}
