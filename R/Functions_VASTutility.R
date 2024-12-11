@@ -1013,8 +1013,8 @@ Jeremy_sample_variable<-function(obj,newdata,what="mu_g",n_samples=100,sample_fi
     set.seed(seed)
     z <- matrix(rnorm(length(mu) * n.sims), ncol = n.sims)
     L <- Matrix::Cholesky(prec, super = TRUE)
-    z <- solve(L, z, system = "Lt")
-    z <- solve(L, z, system = "Pt")
+    z <- Matrix::solve(L, z, system = "Lt")
+    z <- Matrix::solve(L, z, system = "Pt")
     z <- as.matrix(z)
     return(mu + z)
   }
