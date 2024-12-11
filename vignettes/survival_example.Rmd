@@ -21,6 +21,7 @@ library(sf)
 library(ggplot2)
 library(gridExtra)
 Mill.vast<-readRDS("Mill_vastmodel.rds")
+Mill.vast$surveydata<-st_transform(Mill.vast$surveydata,"wgs84")
 ```
 
 ### Estimating Salmonid Escapement
@@ -32,7 +33,8 @@ This project was originally designed to support salmonid population monitoring i
 While in some cases it may be possible to directly model the number of unique redds, most spawning ground monitoring suffers from difficulties, interruptions, and lack of coverage that make this infeasible. Instead this method focuses on the "area under the curve" or AUC method (not to be confused with the "area under the receiver operating curve" metric which is sometimes abbreviated AUC). In this method, the predicted number of total (non-unique) redds is plotted over time. 
 
 ```{r }
-dat1<-subset(Mill.vast$preds,Year==2015 & Reach==9)[,c("Redds","Day")]
+dat1<-subset(Mill.vast$preds,Year==2015 & Reach==9)[,c("pred_Redds","Statday")]
+names(dat1)<-c("Redds","Day")
 dat1$group<-"Predicted"
 dat2<-subset(Mill.vast$countdata,Year==2015 & Reach==9)[,c("Redds","Day")]
 dat2$group<-"Observed"
@@ -56,6 +58,8 @@ The area under the curve will be in units of Redds*Days. If we divide this numbe
 
 ```{r}
 Mill.redds.sf<-st_read(dsn="Mill_Creek_redds_example.shp")
+Mill.redds.sf<-st_transform(Mill.redds.sf,"wgs84")
+
 Mill.redds<-data.frame(as.data.frame(Mill.redds.sf)[,c("Year","rdd_nm_","srvy_dt","rdd_st_")],lon=st_coordinates(Mill.redds.sf)[,1],lat=st_coordinates(Mill.redds.sf)[,2])
 Mill.redds$srvy_dt<-sapply(Mill.redds$srvy_dt,FUN=function(x)return(strsplit(x,split=" ")[[1]][1]))
 
@@ -66,9 +70,10 @@ First we recall the redd data from before and do some minor formatting. Each red
 
 Next, the MakeReddSurvival function will process the data into a usable form. Because we have surveyed each reach multiple times, we can use the intervals between surveys and the redd status codes to determine a minimum and maximum survival time for each redd.
 
+
 ```{r}
 Mill.survdata<-MakeReddSurvival(streamvast = Mill.vast,redds = Mill.redds,redd.ids = "rdd_nm_",
-                           redd.crs = 2286,redd.status = "rdd_st_",survey.tol = 250)
+                           redd.crs = "wgs84",redd.status = "rdd_st_",survey.tol = 250)
 head(Mill.survdata)
 ```
 

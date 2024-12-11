@@ -144,7 +144,7 @@ Now that we have a fully processed and valid network, and have assigned our reac
 If there are numerous surveys, this function can be time consuming
 Future versions will have expanded capabilities to also handle data collected at discreet points, such as dams or weirs.
 
-The final step is to combine the spatial reaches, our surveys, and any other data. This last function will use the survey tracks to determine the amount of effort applied to each reach on a given date, which will become the offset for the VAST model. Separately, it will also match observations to each survey, and this allows the observed counts and density for each reach on each date to be calculated and used in the model. In this example, each observation has its own coordinates, but a total count for the survey can also be used (in which case, the function assumes observations are evenly spaced, equivalent to constant density over the surveyed area. Note that with large datasets, this step may take several hours.
+The final step is to combine the spatial reaches, our surveys, and any other data. This last function will use the survey tracks to determine the amount of effort applied to each reach on a given date, which will become the offset for the VAST model. Separately, it will also match observations to each survey, and this allows the observed counts and density for each reach on each date to be calculated and used in the model. In this example, each observation has its own coordinates, but a total count for the survey can also be used (in which case, the function assumes observations are evenly spaced, equivalent to constant density over the surveyed area. Note that with large datasets, this step may take several hours. By default, distance measures are converted to kilometers, but this can be set by the user.
 
 ```{r results="hide", warning=FALSE,}
 
@@ -155,6 +155,6 @@ head(Mill.data)
 
 ```
 
-In the next chapter, We will explore some additional options for formatting the data for use in VAST, and how to ensure that the necessary accessory objects and dataframes are ready for VAST package functions.
+In the next chapter, We will explore some additional options for formatting the data for use in tinyVAST, and how to ensure that the necessary accessory objects and dataframes are ready.
 
 

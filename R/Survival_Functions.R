@@ -7,6 +7,7 @@
 #' @param redds         a dataframe containing observations of redds in each row
 #' @param redd.ids      character; the name of the column with consistent id for each read over time
 #' @param redd.crs      a crs for the redds
+#' @param redd.coords   A vector of length 2 with the names of the columns for longitude and latitude
 #' @param survey.tol    numeric; a max tolerance for matching redds to survey lines
 #' @param redd.status   character; the name of the column with redd status (should use NR, SV, NV coding)
 #' @param min.surveys   A minimum number of surveys for observations of a reach to be included
@@ -17,12 +18,12 @@
 #'
 #' @examples
 MakeReddSurvival<-function(streamvast,redds,redd.ids="redd_name_txt",redd.crs="wgs84",
-                           survey.tol=250,redd.status="redd_status_code",min.surveys=1,
-                           buffer=14){
+                           redd.coords=c("lon","lat"),survey.tol=250,
+                           redd.status="redd_status_code",min.surveys=1,buffer=14){
 
   reach.box<-sf::st_bbox(sf::st_transform(streamvast$reachdata,crs=redd.crs))
-  good.redds<-subset(redds,lon>=reach.box[1] & lon<=reach.box[3] &
-                       lat>=reach.box[2] & lat<=reach.box[4])
+  good.redds<-redds[redds[,redd.coords[1]]>=reach.box[1] & redds[,redd.coords[1]]<=reach.box[3] &
+                      redds[,redd.coords[2]]>=reach.box[2] & redds[,redd.coords[2]]<=reach.box[4],]
   redd.names<-unique(good.redds[,redd.ids])
 
   survival.data<-data.frame(Redd=redd.names,Year=NA,min.start=NA,max.start=NA,min.end=NA,max.end=NA,
@@ -39,15 +40,15 @@ MakeReddSurvival<-function(streamvast,redds,redd.ids="redd_name_txt",redd.crs="w
   pb<-utils::txtProgressBar(min = 0, max = length(redd.names), initial = 0, style=3)
   for(i in 1:length(redd.names)){
 
-    r.data<-redds[redds[,redd.ids]==redd.names[i],]
+    r.data<-redds[which(redds[,redd.ids]==redd.names[i]),]
 
     survival.data$Year[i]<-r.data$Year[1]
-    survival.data$lon[i]<-r.data$lon[1]
-    survival.data$lat[i]<-r.data$lat[1]
+    survival.data$lon[i]<-r.data[1,redd.coords[1]]
+    survival.data$lat[i]<-r.data[1,redd.coords[2]]
 
     # check that the redd contains a valid history
     if(sum(r.data[,redd.status]=="NR")==1 & sum(r.data[,redd.status]=="NV")<=1 &
-       is.na(r.data$lon[1])==F){
+       is.na(r.data[1,redd.coords[1]])==F){
 
       redd.sf<-sf::st_as_sf(as.data.frame(survival.data[i,]),coords=c("lon","lat"),crs=redd.crs)
       redd.sf2<-sf::st_transform(redd.sf,crs=sf::st_crs(streamvast$reachdata))
@@ -224,7 +225,7 @@ plotSurvivalHistogram<-function(table,year="all",reach="all",title){
   outplot<-ggplot2::ggplot()+
     ggplot2::geom_histogram(data = table,ggplot2::aes(MedLife),bins=20)+
     ggplot2::geom_vline(xintercept=stats::quantile(table$MedLife,probs=c(.05,.5,.95)),
-               col=2,linetype=c(3,2,3),linewidth=c(1,1.25,1))+ggplot2::xlab("Days")+
+                        col=2,linetype=c(3,2,3),linewidth=c(1,1.25,1))+ggplot2::xlab("Days")+
     ggplot2::theme_bw()
   if(missing(title)==F){
     outplot<-outplot+ggplot2::ggtitle(title)
@@ -238,6 +239,7 @@ plotSurvivalHistogram<-function(table,year="all",reach="all",title){
 #' @param model a fitted INLA survival model
 #' @param data a dataframe of redd observations, usually from MakeReddSurvival
 #' @param year numeric; a subset of years to include in the plot
+#' @param mult a numeric multiplier, used to backtransform values, if necessary
 #' @param reach numeric; a subset of reach numbers to include in the plot
 #' @param title character; a title to pass to ggtitle()
 #'
@@ -245,9 +247,11 @@ plotSurvivalHistogram<-function(table,year="all",reach="all",title){
 #' @export
 #'
 #' @examples
-plotSurvivalCurves<-function(model,data,year="all",reach="all",title){
+plotSurvivalCurves<-function(model,data,year="all",reach="all",title,mult=1){
 
   surv.table<-SurvivalTable(model)
+  surv.table$MedLife<-surv.table$MedLife*mult
+
   gg.seg.table<-data.frame(Year=NA,Reach=NA, group=rep(1:nrow(surv.table),each=100),
                            Day=rep(1:100,times=nrow(surv.table)),Surv=NA)
   fam<-model$.args$family
@@ -259,12 +263,12 @@ plotSurvivalCurves<-function(model,data,year="all",reach="all",title){
     gg.seg.table$Year[start:end]<-surv.table$Year[i]
     gg.seg.table$Reach[start:end]<-surv.table$Reach[i]
     if(fam=="gammasurv"){
-      gg.seg.table$Surv[start:end]<-1-stats::pgamma(xseq[1:100],shape=model$summary.hyperpar[1,1],
-                                             scale=surv.table$Scale[i])
+      gg.seg.table$Surv[start:end]<-1-stats::pgamma(xseq[1:100]/mult,shape=model$summary.hyperpar[1,1],
+                                                    scale=surv.table$Scale[i])
     }
     if(fam=="weibullsurv"){
-      gg.seg.table$Surv[start:end]<-1-stats::pweibull(xseq[1:100],shape=model$summary.hyperpar[1,1],
-                                               scale=surv.table$Scale[i])
+      gg.seg.table$Surv[start:end]<-1-stats::pweibull(xseq[1:100]/mult,shape=model$summary.hyperpar[1,1],
+                                                      scale=surv.table$Scale[i])
     }
   }
   if(year[1]!="all"){gg.seg.table<-subset(gg.seg.table,Year%in%year)}
@@ -277,19 +281,19 @@ plotSurvivalCurves<-function(model,data,year="all",reach="all",title){
     ggplot2::geom_point(data=data.frame(Day=stats::quantile(data$mean.duration,probs=0:100/100),Surv=1-0:100/100),
                         ggplot2::aes(x=Day,y=Surv))+
     ggplot2::geom_errorbarh(data=data.frame(Surv=1-0:100/100,xmin=stats::quantile(data$min.duration,probs=0:100/100),
-                                   xmax=stats::quantile(data$max.duration,probs=0:100/100)),
+                                            xmax=stats::quantile(data$max.duration,probs=0:100/100)),
                             ggplot2::aes(y=Surv,xmin=xmin,xmax=xmax),alpha=.5,col="gray50")
   if(fam=="gammasurv"){
     out.plot<-out.plot+
       ggplot2::geom_line(data=data.frame(Day=stats::qgamma((0:100)/100,shape = model$summary.hyperpar[1,1],
-                                           scale = scale),Surv=1-0:100/100),
-                         ggplot2::aes(x=Day,y=Surv),linewidth=1)+ggplot2::ylab("Survival")
+                                                           scale = scale),Surv=1-0:100/100),
+                         ggplot2::aes(x=Day*mult,y=Surv),linewidth=1)+ggplot2::ylab("Survival")
   }
   if(fam=="weibullsurv"){
     out.plot<-out.plot+
       ggplot2::geom_line(data=data.frame(Day=stats::qweibull((0:100)/100,shape = model$summary.hyperpar[1,1],
-                                             scale = scale),Surv=1-0:100/100),
-                ggplot2::aes(x=Day,y=Surv),linewidth=1)+ggplot2::ylab("Survival")
+                                                             scale = scale),Surv=1-0:100/100),
+                         ggplot2::aes(x=Day*mult,y=Surv),linewidth=1)+ggplot2::ylab("Survival")
   }
   if(missing(title)==F){
     out.plot<-out.plot+ggplot2::ggtitle(title)
@@ -309,7 +313,9 @@ plotSurvivalCurves<-function(model,data,year="all",reach="all",title){
 #' @export
 #'
 #' @examples
-MakeEscapement<-function(streamvast,survival,fixed.survival=F,mult=1.62){
+MakeEscapement<-function(streamvast,survival,fixed.survival=F,mult=1.62,years="all",reaches="all"){
+
+  if(is.null(streamvast$escapedata)==F){warning("Overwriting previous escapement data")}
 
   escape<-streamvast$aucdata$aucdata
   escape$Redds<-NA
@@ -318,27 +324,87 @@ MakeEscapement<-function(streamvast,survival,fixed.survival=F,mult=1.62){
 
   reachname<-streamvast$reachname
 
+  if(years[1]=="all"){
+    good.years<-sort(unique(escape$Runyear))
+  }else{
+    good.years<-sort(unique(years[years%in%escape$Runyear]))
+  }
+  if(reaches[1]=="all"){
+    good.reaches<-sort(unique(escape[,reachname]))
+  }else{
+    good.reaches<-sort(unique(reaches[reaches%in%escape[,reachname]]))
+  }
+
+  good.escape<-escape[escape$Runyear%in%good.years & escape[,reachname]%in%good.reaches,]
+
   if(fixed.survival){
     if(is.numeric(survival)==F | length(survival)>1){stop(" If using 'fixed.survival = TRUE',
                  then 'survival' should be a single number representing the average redd life in days")}
-    escape$Redds<-escape$tAUC/survival
-    escape$Redds_lower<-escape$tAUC_lower/survival
-    escape$Redds_upper<-escape$tAUC_upper/survival
+    good.escape$pred_Redds<-good.escape$pred_AUC/survival
+    good.escape$Redds_SD<-good.escape$pred_AUC/survival
+    good.escape$pred_Redds_lower<-good.escape$pred_AUC_lower/survival
+    good.escape$pred_Redds_upper<-good.escape$pred_AUC_upper/survival
+
+    yvec<-sort(unique(streamvast$timetable$Runyear))
+    rvec<-sort(unique(as.data.frame(streamvast$reachdata)[,streamvast$reachname]))
+    survival<-data.frame(Year=rep(yvec,each=length(rvec)),Reach=rep(rvec,length(yvec)),MedLife=survival)
+
   }else{
-    for(i in 1:nrow(escape)){
-      escape$Redds[i]<-escape$tAUC[i]/survival$MedLife[survival$Year==escape$Year[i] &
-                                                         survival[,streamvast$reachname]==escape[i,streamvast$reachname]]
-      escape$Redds_lower[i]<-escape$tAUC_lower[i]/survival$MedLife[survival$Year==escape$Year[i] &
-                                                                     survival[,streamvast$reachname]==escape[i,streamvast$reachname]]
-      escape$Redds_upper[i]<-escape$tAUC_upper[i]/survival$MedLife[survival$Year==escape$Year[i] &
-                                                                     survival[,streamvast$reachname]==escape[i,streamvast$reachname]]
+    for(i in 1:nrow(good.escape)){
+      survival.match<-which(survival$Year==good.escape$Runyear[i] &
+                              survival[,streamvast$reachname]==good.escape[i,streamvast$reachname])
+      good.escape$Redds[i]<-good.escape$pred_AUC[i]/survival$MedLife[survival.match]
+      good.escape$Redds_lower[i]<-good.escape$pred_AUC_lower[i]/survival$MedLife[survival.match]
+      good.escape$Redds_upper[i]<-good.escape$pred_AUC_upper[i]/survival$MedLife[survival.match]
+      good.escape$Redds_SD[i]<-good.escape$pred_AUC_SD[i]/survival$MedLife[survival.match]
     }
   }
-  escape$Escape<-escape$Redds*mult
-  escape$Escape_lower<-escape$Redds_lower*mult
-  escape$Escape_upper<-escape$Redds_upper*mult
+  good.escape$Escape<-good.escape$Redds*mult
+  good.escape$Escape_lower<-good.escape$Redds_lower*mult
+  good.escape$Escape_upper<-good.escape$Redds_upper*mult
+  good.escape$Escape_SD<-good.escape$Redds_SD*mult
 
-  return(escape)
+  # now make the year totals, which will require dipping back into the simulations
+  yearvec<-sort(unique(good.escape$Runyear))
+  reachvec<-sort(unique(good.escape[,streamvast$reachname]))
+
+  escapetotals<-data.frame(Runyear=yearvec,Escape=NA,Escape_lower=NA,Escape_median=NA,
+                           Escape_upper=NA,Escape_SD=NA)
+
+  escapesims<-cbind(streamvast$sims$aucsims[,c("Runyear",reachname)],
+                    matrix(data=NA,ncol=ncol(streamvast$sims$aucsims)-2,
+                           nrow=nrow(streamvast$sims$aucsims)))
+  escapetotalsims<-cbind(Runyear=yearvec,matrix(data=NA,ncol=ncol(streamvast$sims$auctotalsims)-1,
+                                                nrow=length(yearvec)))
+
+  for(y in 1:nrow(escapetotals)){
+    picks<-which(escapesims$Runyear==escapetotals$Runyear[y] &
+                   escapesims[,reachname]%in%good.reaches)
+
+    yearsim<-streamvast$sims$aucsims[picks,]
+    yearsurvival<-subset(survival,Year==escapetotals$Runyear[y])
+
+    yearreachsurv<-yearsurvival$MedLife[match(yearsim[,reachname],yearsurvival$Reach)]
+    yearescapesim<-(yearsim[,3:ncol(yearsim)]/yearreachsurv)*mult
+    yeartotals<-apply(yearescapesim,MARGIN=2,FUN=sum)
+
+    escapesims[picks,3:ncol(escapesims)]<-yearescapesim
+    escapetotalsims[y,2:ncol(escapetotalsims)]<-yeartotals
+
+    escapetotals$Escape[y]<-sum(good.escape$Escape[good.escape$Runyear==escapetotals$Runyear[y]])
+    escapetotals$Escape_lower[y]<-stats::quantile(yeartotals,probs=.025)
+    escapetotals$Escape_median[y]<-stats::quantile(yeartotals,probs=.5)
+    escapetotals$Escape_upper[y]<-stats::quantile(yeartotals,probs=.975)
+    escapetotals$Escape_SD[y]<-sqrt(stats::var(yeartotals))
+  }
+
+  streamvast$escapedata$escapedata<-good.escape[,c("Runyear",reachname,"Escape",
+                                                   "Escape_lower","Escape_upper","Escape_SD")]
+  streamvast$escapedata$escapetotals<-escapetotals
+  streamvast$sims$escapesims<-escapesims
+  streamvast$sims$escapetotalsims<-as.data.frame(escapetotalsims)
+
+  return(streamvast)
 }
 
 
@@ -346,22 +412,51 @@ MakeEscapement<-function(streamvast,survival,fixed.survival=F,mult=1.62){
 #'
 #' @param escape A table of escapement values, usually from MakeEscapement
 #' @param obs.escape A vector of observed or reported escapement values; must be equal to the # of years in escape
+#' @param median should the plot show the predicted escapement based on the mle or the median of the posterior
 #' @param title character; a title to be passed to ggtitle
-#' @param plot logical; should the function return the plot, or just the data
 #'
 #' @return either a ggplot object or a dataframe depending on the 'plot' option
 #' @export
 #'
 #' @examples
-plotEscapement<-function(escape,obs.escape,title,plot=T){
+plotEscapement<-function(streamvast,obs.escape,title,ribbons=NA,median=F){
 
-  escape.totals<-data.frame(Year=sort(unique(escape$Year)),
-                            Escapement=stats::aggregate(escape$Escape,by=list(escape$Year),FUN=sum)[,2],
-                            lower=stats::aggregate(escape$Escape_lower,by=list(escape$Year),FUN=sum)[,2],
-                            upper=stats::aggregate(escape$Escape_upper,by=list(escape$Year),FUN=sum)[,2],
-                            type="Predicted")
+  escapetotals<-streamvast$escapedata$escapetotals
+  escapetotals$type<-"Predicted"
 
-  if(plot==F){return(escape.totals)}
+  if(median){escapetotals$Escape<-escapetotals$Escape_median}
+
+  # should we plot a confidence ribbon
+  if(is.na(ribbons[1])==F){
+    # are we setting a number of ribbons
+    if(length(ribbons)==1 & ribbons[1]>=1){
+      lows<-seq(from=.025,to=.5,length.out=ribbons+1)
+      highs<-seq(from=.5,to=.975,length.out=ribbons+1)
+    }
+    # or specifying a number of ribbons
+    if(all(ribbons<1) & all(ribbons>0)){
+      lows<-sort(ribbons[ribbons<=.5])
+      lows<-unique(c(lows,.5))
+      highs<-sort(ribbons[ribbons>=.5])
+      highs<-unique(c(.5,highs))
+    }
+    highs<-rev(highs)
+    if(length(lows)!=length(highs)){stop("Ribbon argument must be symmetric")}
+    nribs<-length(lows)-1
+
+    ribbon.data<-data.frame(Runyear=rep(escapetotals$Runyear,nribs),
+                            ribbon=as.factor(rep(1:nribs,each=nrow(escapetotals))),
+                            ymin=NA,ymax=NA,ymin2=NA,ymax2=NA)
+
+    for(i in 1:nrow(ribbon.data)){
+      yearsim<-streamvast$sims$escapetotalsims[streamvast$sims$escapetotalsims$Runyear==ribbon.data$Runyear[i],2:ncol(streamvast$sims$escapetotalsims)]
+      rib<-as.integer(as.character(ribbon.data$ribbon[i]))
+      ribbon.data$ymin[i]<-stats::quantile(unlist(yearsim),probs=lows[rib])
+      ribbon.data$ymax[i]<-stats::quantile(unlist(yearsim),probs=lows[rib+1])
+      ribbon.data$ymax2[i]<-stats::quantile(unlist(yearsim),probs=highs[rib])
+      ribbon.data$ymin2[i]<-stats::quantile(unlist(yearsim),probs=highs[rib+1])
+    }
+  }
 
   if(missing(obs.escape)){
     obs.totals<-data.frame(Year=vector(),Escapement=vector(),lower=vector(),
@@ -370,23 +465,30 @@ plotEscapement<-function(escape,obs.escape,title,plot=T){
     if(any(c("Year","Escapement")%in%names(obs.escape)==F)){
       stop("Argument obs.escape must include columns named 'Year' and 'Escapement'!")
     }
-    obs.totals<-data.frame(Year=obs.escape$Year,Escapement=obs.escape$Escapement,
-                           lower=NA,upper=NA,type="Reported")
+    obs.totals<-data.frame(Runyear=obs.escape$Year,Escape=obs.escape$Escapement,Escape_lower=NA,
+                           Escape_median=NA,Escape_upper=NA,Escape_SD=NA,type="Reported")
   }
 
-  escape.plot<-rbind(escape.totals,obs.totals)
+  escape.plot<-rbind(escapetotals,obs.totals)
   escape.plot$type<-factor(escape.plot$type,levels = c("Reported","Predicted"))
 
-  outplot<-ggplot2::ggplot(data=escape.plot)+
-    ggplot2::geom_point(ggplot2::aes(x=Year,y=Escapement,col=type))+
-    ggplot2::geom_line(ggplot2::aes(x=Year,y=Escapement,col=type))+
-    ggplot2::geom_line(ggplot2::aes(x=Year,y=lower,group=type),col=2,linetype=3)+
-    ggplot2::geom_line(ggplot2::aes(x=Year,y=upper,group=type),col=2,linetype=3)+
-    ggplot2::scale_x_continuous(n.breaks=length(unique(escape.totals$Year)))+
+  outplot<-ggplot2::ggplot()+
+    ggplot2::geom_point(data=escape.plot,ggplot2::aes(x=Runyear,y=Escape,col=type))+
+    ggplot2::geom_line(data=escape.plot,ggplot2::aes(x=Runyear,y=Escape,col=type))+
+    ggplot2::geom_line(data=escape.plot,ggplot2::aes(x=Runyear,y=Escape_lower,group=type),col=2,linetype=3)+
+    ggplot2::geom_line(data=escape.plot,ggplot2::aes(x=Runyear,y=Escape_upper,group=type),col=2,linetype=3)
+  if(is.na(ribbons[1])==F){
+    outplot<-outplot+
+      ggplot2::geom_ribbon(data=ribbon.data,ggplot2::aes(x=Runyear,ymin=ymin,ymax=ymax,alpha=ribbon),fill=2,show.legend = F)+
+      ggplot2::geom_ribbon(data=ribbon.data,ggplot2::aes(x=Runyear,ymin=ymin2,ymax=ymax2,alpha=ribbon),fill=2,show.legend = F)+
+      scale_alpha_discrete(range=c(.1,.75))
+  }
+  outplot<-outplot+
+    ggplot2::scale_x_continuous(n.breaks=length(unique(escapetotals$Runyear)))+
     ggplot2::scale_color_manual(values=1:2,drop=F)+
     ggplot2::theme_bw()+
     ggplot2::theme(legend.title = ggplot2::element_blank(),legend.position = "inside",
-          legend.position.inside = c(.02,.98),legend.justification = c(0,1))+
+                   legend.position.inside = c(.02,.98),legend.justification = c(0,1))+
     ggplot2::ylab("Escapement")+ggplot2::ylim(c(0,NA))
   if(missing(title)==F){outplot<-outplot+ggplot2::ggtitle(title)}
 
@@ -409,9 +511,9 @@ EscapeReport<-function(streamvast,watershed){
                           Stream=NA,Year=streamvast$preds$Year,
                           Reach=streamvast$preds$Reach,Month=streamvast$preds$Month,Day=streamvast$preds$Day,
                           StartLon=NA,StartLat=NA,EndLon=NA,EndLat=NA,
-                          ObsDensity=NA,ObsRedds=NA,ObsEffort=NA,PredDensity=round(streamvast$preds$Density,3),
-                          Pred_LowerCI=round(streamvast$preds$Density_lower,3),
-                          Pred_UpperCI=round(streamvast$preds$Density_upper,3))
+                          ObsDensity=NA,ObsRedds=NA,ObsEffort=NA,PredDensity=round(streamvast$preds$pred_Density,3),
+                          Pred_LowerCI=round(streamvast$preds$pred_Density_lower,3),
+                          Pred_UpperCI=round(streamvast$preds$pred_Density_upper,3))
 
   reaches.gps<-sf::st_transform(streamvast$reachdata,"wgs84")
 
@@ -489,7 +591,7 @@ EscapeReport2<-function(streamvast,survival,escape,watershed){
 
     pred.match<-which(streamvast$preds$Year==report.data$Year[i] &
                         streamvast$preds$Reach==report.data$Reach[i])
-    report.data$PredDensity[i]<-round(mean(vast$preds$Density[pred.match]),2)
+    report.data$PredDensity[i]<-round(mean(vast$preds$pred_Density[pred.match]),2)
 
     if(is.data.frame(survival)){
       surv.match<-which(survival$Year==report.data$Year[i] &
