@@ -977,9 +977,23 @@ Dharmaplot<-function(streamvast,span=.1){
 }
 
 
-# For now, this is the best place to put it. THis is my hacked together variant that I use to sample
+# For internal use by the preds functions. This is my hacked together variant that I use to sample
 # the joint posterior distribution and simulataneously generate predictions at user specified points
 # as opposed to the points in the original data
+#' Title
+#'
+#' @param obj a tinyVAST model object
+#' @param newdata a dataset for making new predictions
+#' @param what what predictions are desired, almost always "mu_g"
+#' @param n_samples integer of samples
+#' @param sample_fixed logical; almost always T
+#' @param seed integer; a seed for the random draws
+#' @param bias.correct logical; should the transformation bias correction be applied; very slow
+#'
+#' @return an object with simulated predictions on newdata
+#' @export
+#'
+#' @examples
 Jeremy_sample_variable<-function(obj,newdata,what="mu_g",n_samples=100,sample_fixed=TRUE,seed=123456,bias.correct=F){
 
   require(Matrix)
