@@ -22,5 +22,9 @@ This section is demonstrates how to format and clean a set of lines, convert it 
 
 ## Formating and Running VAST
 This section shows how to use the network and the associated data to produce a model using VAST functions, and provides some basic advice for choosing settings and other features. [Fitting a VAST Model](https://jpharris7.github.io/StreamVAST/articles/model_fitting.html)
-## Plots and outputs
-The tutorial for this section is under construction.
+
+## Salmonid Escapement Estimation
+The original impetus for this project was the need to improve population estimates for salmonids in Washington State. This article contains information of particular use to salmon biologists and fisheries managers and shows how the data and analysis of from the previous chapters can be extended to estimate escapement. [Estimating Salmonid Escapement](https://jpharris7.github.io/StreamVAST/articles/survival_example.html)
+
+
+

@@ -1,5 +1,5 @@
 ---
-title: "Estimating Salmonid Escapement after Fitting a VAST model"
+title: "Estimating Salmonid Escapement after Fitting a tinyVAST model"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Estimating Salmonid Escapement after Fitting a VAST model}
