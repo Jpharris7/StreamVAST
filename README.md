@@ -2,12 +2,12 @@
 R package for modeling stream networks with VAST
 
 ## Description
-StreamVAST is a package that aids users designing spatio-temporal models for data collected in stream networks. It is designed to integrate easily with the [VAST package](https://github.com/James-Thorson-NOAA/VAST), and users will need to be familiar with VAST to understand and make full use these features. A working knowledge of the [sfnetworks](https://cran.r-project.org/web/packages/sfnetworks/vignettes/sfn01_structure.html) package is also recommended.  
+StreamVAST is a package that aids users designing spatio-temporal models for data collected in stream networks. It is designed to integrate easily with the [tinyVAST package](https://github.com/vast-lib/tinyVAST)), and users will need to be somewhat familiar with tinyVAST to understand and make full use these features. A working knowledge of the [sfnetworks](https://cran.r-project.org/web/packages/sfnetworks/vignettes/sfn01_structure.html) package is also recommended.  
 StreamVAST contains a variety of functions to guide users in converting linework from other sources into a valid network with the appropriate characteristics. User have options for selecting a root node, pruning unnecessary branches, dividing the network into prediction frames, and associating various data types with network features. Other features will assist with generating the objects needed for VAST stream network functionality, assessing model fit, and easily making various maps and plots. 
 
 This package is still in the early phases of development, and users should expect frequent updates and changes.
 ## Installation
-It is strongly recommended that users first install the VAST package and its dependencies. 
+It is strongly recommended that users first install the tinyVAST package and its dependencies. 
 
 To install StreamVAST, use this code:
 ```
