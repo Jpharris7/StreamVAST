@@ -1,102 +1,44 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>/404.html</loc>
-  </url>
-  <url>
-    <loc>/articles/index.html</loc>
-  </url>
-  <url>
-    <loc>/articles/model_fitting.html</loc>
-  </url>
-  <url>
-    <loc>/articles/shape_prep.html</loc>
-  </url>
-  <url>
-    <loc>/authors.html</loc>
-  </url>
-  <url>
-    <loc>/index.html</loc>
-  </url>
-  <url>
-    <loc>/reference/AddFeatures.html</loc>
-  </url>
-  <url>
-    <loc>/reference/AssembleReddData.html</loc>
-  </url>
-  <url>
-    <loc>/reference/AssignReaches.html</loc>
-  </url>
-  <url>
-    <loc>/reference/AttachData.html</loc>
-  </url>
-  <url>
-    <loc>/reference/CheckNetwork.html</loc>
-  </url>
-  <url>
-    <loc>/reference/ConstructStreamVAST.html</loc>
-  </url>
-  <url>
-    <loc>/reference/EditFeatures.html</loc>
-  </url>
-  <url>
-    <loc>/reference/ExtractBasin.html</loc>
-  </url>
-  <url>
-    <loc>/reference/FindRoots.html</loc>
-  </url>
-  <url>
-    <loc>/reference/FixLoops.html</loc>
-  </url>
-  <url>
-    <loc>/reference/index.html</loc>
-  </url>
-  <url>
-    <loc>/reference/LocateFeature.html</loc>
-  </url>
-  <url>
-    <loc>/reference/LocateRoot.html</loc>
-  </url>
-  <url>
-    <loc>/reference/Makesfnetwork.html</loc>
-  </url>
-  <url>
-    <loc>/reference/MakeSurveyTracks.html</loc>
-  </url>
-  <url>
-    <loc>/reference/plotPredictionMap.html</loc>
-  </url>
-  <url>
-    <loc>/reference/plotStream.html</loc>
-  </url>
-  <url>
-    <loc>/reference/PointSetup.html</loc>
-  </url>
-  <url>
-    <loc>/reference/PruneNetwork.html</loc>
-  </url>
-  <url>
-    <loc>/reference/RiverMeasureLL.html</loc>
-  </url>
-  <url>
-    <loc>/reference/RootNetwork.html</loc>
-  </url>
-  <url>
-    <loc>/reference/RunVAST.html</loc>
-  </url>
-  <url>
-    <loc>/reference/SetTemporalFrame.html</loc>
-  </url>
-  <url>
-    <loc>/reference/SetVastCovariates.html</loc>
-  </url>
-  <url>
-    <loc>/reference/SimplifyNetwork.html</loc>
-  </url>
-  <url>
-    <loc>/reference/VASTeval.html</loc>
-  </url>
-  <url>
-    <loc>/reference/VASTpreds.html</loc>
-  </url>
+<urlset xmlns = 'http://www.sitemaps.org/schemas/sitemap/0.9'>
+<url><loc>https://jpharris7.github.io/StreamVAST/404.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/articles/index.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/articles/model_fitting.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/articles/shape_prep.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/articles/survival_example.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/authors.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/index.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/AddFeatures.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/AdjacencyMatrix.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/AssembleReddData.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/AssignReaches.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/AttachData.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/CheckNetwork.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/ConstructStreamVAST.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/CropArea.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/Dharmaplot.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/EditFeatures.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/ExtractBasin.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/FindRoots.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/FixLoops.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/index.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/Jeremy_sample_variable.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/LocateFeature.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/LocateRoot.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/MakeEscapement.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/MakeReddSurvival.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/Makesfnetwork.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/MakeSurveyTracks.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/plotEscapement.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/plotPredictionMap.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/plotStream.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/plotSurvivalCurves.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/plotSurvivalHistogram.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/PointSetup.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/PruneNetwork.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/RiverMeasureLL.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/RootNetwork.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/SetTemporalFrame.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/SimplifyNetwork.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/SurvivalTable.html</loc></url>
+<url><loc>https://jpharris7.github.io/StreamVAST/reference/VASTpreds.html</loc></url>
 </urlset>
+

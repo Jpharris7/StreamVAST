@@ -1,8 +1,11 @@
-pandoc: '2.18'
-pkgdown: 2.0.7
+pandoc: 3.1.1
+pkgdown: 2.1.1
 pkgdown_sha: ~
 articles:
   model_fitting: model_fitting.html
   shape_prep: shape_prep.html
-last_built: 2024-02-21T23:24Z
-
+  survival_example: survival_example.html
+last_built: 2024-12-11T20:21Z
+urls:
+  reference: https://jpharris7.github.io/StreamVAST/reference
+  article: https://jpharris7.github.io/StreamVAST/articles
