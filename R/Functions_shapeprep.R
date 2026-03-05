@@ -318,12 +318,13 @@ RootNetwork<-function(network,root,root.crs,tolerance=Inf){
 #'
 #' @param shape A sf object with LINESTRING geometry or a sfnetwork
 #' @param type Either "POINT", "VERTEX" or "SEGMENT" which indicates the type of shape to select
+#' @param guide An sf object that is plotted to help the user identify important shapes
 #'
 #' @return A sf object containing the POINTS or LINESTRINGS selected by the user
 #' @export
 #'
 #' @examples
-LocateFeature<-function(shape,type){
+LocateFeature<-function(shape,type="s",guide){
 
   if(toupper(type)%in%c("POINT","P","PT")){type<-"POINT"}
   if(toupper(type)%in%c("V","VER","VRTX","VERTEX")){type<-"VERTEX"}
@@ -356,6 +357,7 @@ LocateFeature<-function(shape,type){
     # start by plotting the network and show any updates
     plot(sf::st_geometry(shape.edges),xlim=c(midpoint[1]-xspan/2,midpoint[1]+xspan/2),
          ylim=c(midpoint[2]-yspan/2,midpoint[2]+yspan/2),pch=16)
+    if(missing(guide)==F){plot(sf::st_geometry(guide),add=T,col=7,lwd=2)}
     plot(sf::st_geometry(shape.nodes),pch=16,add=T,col=1)
     plot(sf::st_geometry(out.sf),add=T,col=4,pch=16,cex=1.25,lwd=1.25)
 
@@ -436,12 +438,13 @@ LocateFeature<-function(shape,type){
 #'
 #' @param shape A sf or sfnetworks object to be editted
 #' @param root A sf POINT for the root (might be obsolete)
+#' @param guide An sf object that is plotted to help the user identify important shapes
 #'
 #' @return A sf or sfnetworks object with the user specificed alterations
 #' @export
 #'
 #' @examples
-EditFeatures<-function(shape,root){
+EditFeatures<-function(shape,root,guide){
 
   if(class(shape)[1]!="sfnetwork"){
     shape.net<-Makesfnetwork(shape)
@@ -477,6 +480,7 @@ EditFeatures<-function(shape,root){
     # start by plotting the network and show any updates
     plot(sf::st_geometry(shape.edges),xlim=c(midpoint[1]-xspan/2,midpoint[1]+xspan/2),
          ylim=c(midpoint[2]-yspan/2,midpoint[2]+yspan/2))
+    if(missing(guide)==F){plot(sf::st_geometry(guide),add=T,col=4,lwd=2)}
     plot(sf::st_geometry(shape.edges),add=T,col=2)
     plot(sf::st_geometry(shape.nodes),pch=21,add=T,col=1,bg=2)
     plot(sf::st_geometry(temp.edges),add=T,col=1)
@@ -544,7 +548,7 @@ EditFeatures<-function(shape,root){
         pick.index<-sf::st_nearest_feature(user.sf,temp.nodes)
 
         if(has.root & pick.index==root.index){
-          warning("Can not remove the root! Selection canceled!")
+          print("Can not remove the root! Selection canceled!")
           resp<-"none"
         }
 
@@ -1155,7 +1159,7 @@ AttachData<-function(shape,
     end.min<-min(end.dists)
 
     if(start.min<=tolerance & end.min<=tolerance){
-      start.feature<-which(start.dists==start.min,)
+      start.feature<-which(start.dists==start.min)
       end.feature<-which(end.dists==end.min)
 
       # we use two types of weights: the first is the % of shape made up of each refshape feature
@@ -1183,8 +1187,10 @@ AttachData<-function(shape,
             for(j in 1:length(all.features)){
               snap.int<-sf::st_intersection(sf::st_geometry(refshape.sf)[all.features[j]],snap.intersect)
               snap.int2<-sf::st_union(snap.int)
-              wgt.vec[j]<-as.numeric(sf::st_length(snap.int2)/sum(sf::st_length(snap.intersect)))
-              alt.wgt<-as.numeric(sf::st_length(snap.int2))/as.numeric(sf::st_length(refshape.sf[all.features,]))
+              if(length(snap.int2)>0){
+                wgt.vec[j]<-as.numeric(sf::st_length(snap.int2)/sum(sf::st_length(snap.intersect)))
+                alt.wgt<-as.numeric(sf::st_length(snap.int2))/as.numeric(sf::st_length(refshape.sf[all.features,]))
+              }
             }
           }else{
             wgt.vec<-as.numeric(sf::st_length(snap.intersect)/sum(sf::st_length(snap.intersect)))
@@ -1488,7 +1494,7 @@ AssignReaches<-function(network,targetsize=NA,habitat,setnodes){
       if(nreaches.vec[i]==1 | network.edges$habitat[i]==F){
         out.edges0<-reach
       }else{
-        reach.nodes0<-sf::st_line_sample(x = reach,sample = c(0,1/nreaches.vec[i]*1:(nreaches.vec[i]-1),1))
+        reach.nodes0<-sf::st_line_sample(x = reach,sample = c(1/nreaches.vec[i]*1:(nreaches.vec[i]-1)))
         reach.nodes<-sf::st_as_sf(sf::st_cast(reach.nodes0,"POINT"))
 
         reach.net<-suppressWarnings(sfnetworks::st_network_blend(sfnetworks::as_sfnetwork(reach),reach.nodes))
@@ -2167,7 +2173,9 @@ RiverMeasureLL<-function(shape,measures,points,crs){
                                  crs=sf::st_crs(shape))
       riverline<-sf::st_cast(sf::st_combine(river.coords),"LINESTRING")
     }
-    points0<-sf::st_line_sample(riverline,sample = as.numeric(measures/sf::st_length(riverline)))
+    sample.pts<-as.numeric(measures/sf::st_length(riverline))
+    if(any(sample.pts>1)){stop("Requested river distance exceeds length of shape")}
+    points0<-sf::st_line_sample(riverline,sample = sample.pts)
     points.sf2<-sf::st_as_sf(as.data.frame(sf::st_coordinates(points0))[,1:2],coords=1:2,
                              crs=sf::st_crs(shape))
     points.sf2$RiverDistance<-measures

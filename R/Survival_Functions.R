@@ -24,12 +24,13 @@ MakeReddSurvival<-function(streamvast,redds,redd.ids="redd_name_txt",redd.crs="w
   reach.box<-sf::st_bbox(sf::st_transform(streamvast$reachdata,crs=redd.crs))
   good.redds<-redds[redds[,redd.coords[1]]>=reach.box[1] & redds[,redd.coords[1]]<=reach.box[3] &
                       redds[,redd.coords[2]]>=reach.box[2] & redds[,redd.coords[2]]<=reach.box[4],]
-  redd.names<-unique(good.redds[,redd.ids])
+  redd.names<-na.omit(unique(good.redds[,redd.ids]))
 
   survival.data<-data.frame(Redd=redd.names,Year=NA,min.start=NA,max.start=NA,min.end=NA,max.end=NA,
                             min.duration=NA,max.duration=NA,Reach=NA,lon=NA,lat=NA,complete=NA)
   surveys<-streamvast$surveydata
   names(surveys)[names(surveys)=="Day"]<-"day"
+  names(redds)[names(redds)=="Day"]<-"day"
 
   # We will also screen out any reaches that receieve a single survey that year
   coverage.table<-stats::aggregate(streamvast$countdata$Year,by=list(Year=streamvast$countdata$Year,
@@ -46,9 +47,29 @@ MakeReddSurvival<-function(streamvast,redds,redd.ids="redd_name_txt",redd.crs="w
     survival.data$lon[i]<-r.data[1,redd.coords[1]]
     survival.data$lat[i]<-r.data[1,redd.coords[2]]
 
+    # Need a more comprehensive way to check for valid redd history
+    new.once<-sum(r.data[,redd.status]=="NR")==1
+    good.coords<-is.na(r.data[1,redd.coords[1]])==F
+    clear.end<-sum(r.data[,redd.status]=="NV")<=1
+
+    # implement a fix if multiple not visible records, but they make sense
+    if(sum(r.data[,redd.status]=="NV")>1){
+
+      min.nv.day<-min(r.data$day[r.data$redd_status=="NV"])
+      max.obs.day<-max(r.data$day[r.data$redd_status%in%c("NR","SV")])
+
+      # if there is an observation after being declared "Not Visible"
+      # then it is amiguous whether it is the same redd still, so must discard
+      # if it is just multiple "Not Visible" records, then we can truncate it
+      # to just the first "Not Visible" and still use the redd
+      if(min.nv.day>max.obs.day){
+        r.data<-subset(r.data,day<=min.nv.day)
+        clear.end<-T
+      }
+    }
+
     # check that the redd contains a valid history
-    if(sum(r.data[,redd.status]=="NR")==1 & sum(r.data[,redd.status]=="NV")<=1 &
-       is.na(r.data[1,redd.coords[1]])==F){
+    if(all(new.once,good.coords,clear.end)){
 
       redd.sf<-sf::st_as_sf(as.data.frame(survival.data[i,]),coords=c("lon","lat"),crs=redd.crs)
       redd.sf2<-sf::st_transform(redd.sf,crs=sf::st_crs(streamvast$reachdata))
@@ -141,12 +162,13 @@ AdjacencyMatrix<-function(reaches){
 #'
 #' @param model A fitted INLA survival model
 #' @param extrayears any years not present in the data for which an estimate is desired
+#' @param extramethod a function that will be applied to the data to extrapolate to new years
 #'
 #' @return an adjacency matrix used by INLA for spatial relationships
 #' @export
 #'
 #' @examples
-SurvivalTable<-function(model,extrayears){
+SurvivalTable<-function(model,extrayears,extramethod){
   if(inherits(model,"inla")==F){stop("Requires a fitted inla model")}
   fam<-model$.args$family
   if(fam%in%c("gammasurv","weibullsurv")==F){
@@ -169,12 +191,13 @@ SurvivalTable<-function(model,extrayears){
       surv.table$MedLife[i]<-stats::qgamma(.5,shape = shape,scale = surv.table$Scale[i])
     }
     if(fam=="weibullsurv"){
-      surv.table$Scale[i]<-(1/(model$summary.fixed[1,1]+year.eff+reach.eff))^(1/shape)
+      surv.table$Scale[i]<-exp(-(model$summary.fixed[1,1]+year.eff+reach.eff)/shape)
       surv.table$MedLife[i]<-stats::qweibull(.5,shape = shape,scale = surv.table$Scale[i])
     }
   }
 
-  # If necessary, extrapolate to additional years, as an average of adjacent years
+  # If necessary, extrapolate to additional years, as an average of adjacent years,
+  # or now you can choose a method for ones outside the sample
   if(missing(extrayears)==F){
 
     #screen out any years already in the data
@@ -189,8 +212,126 @@ SurvivalTable<-function(model,extrayears){
 
         closest.left<-max(datayears[datayears<extra.table$Year[i]])
         closest.right<-min(datayears[datayears>extra.table$Year[i]])
-        extra.table$Scale[i]<-mean(surv.table$Scale[surv.table$Year%in%c(closest.left,closest.right) &
-                                                      surv.table$Reach==extra.table$Reach[i]])
+
+        if(any(is.infinite(c(closest.left,closest.right)))){
+          if(missing(extramethod)){
+            extra.table$Scale[i]<-mean(surv.table$Scale[surv.table$Year%in%c(closest.left,closest.right) &
+                                                          surv.table$Reach==extra.table$Reach[i]])
+          }else{
+            dat<-surv.table$Scale[surv.table$Reach==extra.table$Reach[i]]
+            extra.table$Scale[i]<-do.call(what = extramethod,args = list(x=dat))
+          }
+        }else{
+          extra.table$Scale[i]<-mean(surv.table$Scale[surv.table$Year%in%c(closest.left,closest.right) &
+                                                        surv.table$Reach==extra.table$Reach[i]])
+        }
+
+        if(fam=="gammasurv"){extra.table$MedLife[i]<-stats::qgamma(.5,shape = shape,scale = extra.table$Scale[i])}
+        if(fam=="weibullsurv"){extra.table$MedLife[i]<-stats::qweibull(.5,shape = shape,scale = extra.table$Scale[i])}
+      }
+      surv.table<-rbind(surv.table,extra.table)
+    }else{
+      warning("All values for extrayears already present in model.")
+    }
+  }
+  surv.table<-surv.table[order(surv.table$Year,surv.table$Reach),]
+
+  return(surv.table)
+}
+
+
+#' An Updated Survival Table
+#'
+#' This version can use the pred index to generate predictions under specific
+#' covariate values. This will probably be combined with SurivalTable after some
+#' additional testing
+#'
+#' @param model A fitted INLA survival model
+#' @param pred.index A vector of numbers that correspond to the table in the model data
+#' @param extrayears any years not present in the data for which an estimate is desired
+#' @param extramethod a function that will be applied to the data to extrapolate to new years
+#'
+#' @return
+#' @export
+#'
+#' @examples
+SurvivalTable2<-function(model,newdata,extrayears,extramethod){
+  if(inherits(model,"inla")==F){stop("Requires a fitted inla model")}
+  fam<-model$.args$family
+  if(fam%in%c("gammasurv","weibullsurv")==F){
+    stop("Sorry, the current version only supports gammasurv and weibull surv distributions")
+  }
+
+  shape<-model$summary.hyperpar[1,1]
+
+  if(missing(pred.index)){
+
+    surv.table<-data.frame(Year=rep(model$summary.random$Year$ID,each=nrow(model$summary.random$Reach)),
+                           Reach=rep(model$summary.random$Reach$ID,times=nrow(model$summary.random$Year)),
+                           Shape=shape,Scale=NA,MedLife=NA)
+
+    for(i in 1:nrow(surv.table)){
+
+      year.eff<-model$summary.random$Year$mean[model$summary.random$Year$ID==surv.table$Year[i]]
+      reach.eff<-model$summary.random$Reach$mean[model$summary.random$Reach$ID==surv.table$Reach[i]]
+
+      if(fam=="gammasurv"){
+        surv.table$Scale[i]<-exp(model$summary.fixed[1,1]+year.eff+reach.eff)/shape
+        surv.table$MedLife[i]<-stats::qgamma(.5,shape = shape,scale = surv.table$Scale[i])
+      }
+      if(fam=="weibullsurv"){
+        surv.table$Scale[i]<-exp(-(model$summary.fixed[1,1]+year.eff+reach.eff)/shape)
+        surv.table$MedLife[i]<-stats::qweibull(.5,shape = shape,scale = surv.table$Scale[i])
+      }
+    }
+  }else{
+    if(inherits(model,"bru")==F){stop("For covariate predictions, please fit an inlabru model.")}
+    surv.table<-newdata
+    surv.table$Shape<-shape
+
+    pred.form<-paste0("~",paste(names(model$bru_info$model$effects),collapse = "+"))
+
+    survival.lp<-predict(model,newdata = newdata,n.samples = 500,
+                         formula = as.formula(pred.form))
+
+    if(fam=="gammasurv"){
+      surv.table$Scale<-exp(survival.lp$mean)/shape
+      surv.table$MedLife<-stats::qgamma(.5,shape = shape,scale = surv.table$Scale)
+    }
+    if(fam=="weibullsurv"){
+      surv.table$Scale<-exp(-(survival.lp$mean)/shape)
+      surv.table$MedLife<-stats::qweibull(.5,shape = shape,scale = surv.table$Scale)
+    }
+  }
+  # If necessary, extrapolate to additional years, as an average of adjacent years,
+  # or now you can choose a method for ones outside the sample
+  if(missing(extrayears)==F){
+
+    #screen out any years already in the data
+    extrayears2<-extrayears[extrayears%in%surv.table$Year==F]
+    if(length(extrayears2>0)){
+      extra.table<-data.frame(Year=rep(extrayears2,each=nrow(model$summary.random$Reach)),
+                              Reach=rep(model$summary.random$Reach$ID,times=length(extrayears2)),
+                              Shape=shape,Scale=NA,MedLife=NA)
+
+      datayears<-sort(unique(surv.table$Year))
+      for(i in 1:nrow(extra.table)){
+
+        closest.left<-max(datayears[datayears<extra.table$Year[i]])
+        closest.right<-min(datayears[datayears>extra.table$Year[i]])
+
+        if(any(is.infinite(c(closest.left,closest.right)))){
+          if(missing(extramethod)){
+            extra.table$Scale[i]<-mean(surv.table$Scale[surv.table$Year%in%c(closest.left,closest.right) &
+                                                          surv.table$Reach==extra.table$Reach[i]])
+          }else{
+            dat<-surv.table$Scale[surv.table$Reach==extra.table$Reach[i]]
+            extra.table$Scale[i]<-do.call(what = extramethod,args = list(x=dat))
+          }
+        }else{
+          extra.table$Scale[i]<-mean(surv.table$Scale[surv.table$Year%in%c(closest.left,closest.right) &
+                                                        surv.table$Reach==extra.table$Reach[i]])
+        }
 
         if(fam=="gammasurv"){extra.table$MedLife[i]<-stats::qgamma(.5,shape = shape,scale = extra.table$Scale[i])}
         if(fam=="weibullsurv"){extra.table$MedLife[i]<-stats::qweibull(.5,shape = shape,scale = extra.table$Scale[i])}
@@ -223,8 +364,8 @@ plotSurvivalHistogram<-function(table,year="all",reach="all",title){
   if(reach[1]!="all"){table<-subset(table,Reach%in%reach)}
 
   outplot<-ggplot2::ggplot()+
-    ggplot2::geom_histogram(data = table,ggplot2::aes(MedLife),bins=20)+
-    ggplot2::geom_vline(xintercept=stats::quantile(table$MedLife,probs=c(.05,.5,.95)),
+    ggplot2::geom_histogram(data = table,ggplot2::aes(ExpLife),bins=20)+
+    ggplot2::geom_vline(xintercept=stats::quantile(table$ExpLife,probs=c(.05,.5,.95)),
                         col=2,linetype=c(3,2,3),linewidth=c(1,1.25,1))+ggplot2::xlab("Days")+
     ggplot2::theme_bw()
   if(missing(title)==F){
@@ -265,24 +406,26 @@ plotSurvivalCurves<-function(model,data,year="all",reach="all",title,mult=1){
     if(fam=="gammasurv"){
       gg.seg.table$Surv[start:end]<-1-stats::pgamma(xseq[1:100]/mult,shape=model$summary.hyperpar[1,1],
                                                     scale=surv.table$Scale[i])
+      scale<-exp(model$summary.fixed[1,1])/model$summary.hyperpar[1,1]
     }
     if(fam=="weibullsurv"){
       gg.seg.table$Surv[start:end]<-1-stats::pweibull(xseq[1:100]/mult,shape=model$summary.hyperpar[1,1],
                                                       scale=surv.table$Scale[i])
+      scale<-exp(-model$summary.fixed[1,1]/model$summary.hyperpar[1,1])
+
     }
   }
   if(year[1]!="all"){gg.seg.table<-subset(gg.seg.table,Year%in%year)}
   if(reach[1]!="all"){gg.seg.table<-subset(gg.seg.table,Reach%in%reach)}
 
-  scale<-exp(model$summary.fixed[1,1])/model$summary.hyperpar[1,1]
 
   out.plot<-ggplot2::ggplot()+ggplot2::theme_bw()+
     ggplot2::geom_line(data=gg.seg.table,ggplot2::aes(x=Day,y=Surv,group=group),col=2,alpha=.05)+
     ggplot2::geom_point(data=data.frame(Day=stats::quantile(data$mean.duration,probs=0:100/100),Surv=1-0:100/100),
                         ggplot2::aes(x=Day,y=Surv))+
-    ggplot2::geom_errorbarh(data=data.frame(Surv=1-0:100/100,xmin=stats::quantile(data$min.duration,probs=0:100/100),
-                                            xmax=stats::quantile(data$max.duration,probs=0:100/100)),
-                            ggplot2::aes(y=Surv,xmin=xmin,xmax=xmax),alpha=.5,col="gray50")
+    ggplot2::geom_errorbar(data=data.frame(Surv=1-0:100/100,xmin=stats::quantile(data$min.duration,probs=0:100/100),
+                                           xmax=stats::quantile(data$max.duration,probs=0:100/100)),
+                           ggplot2::aes(y=Surv,xmin=xmin,xmax=xmax),alpha=.5,col="gray50",orientation = "y")
   if(fam=="gammasurv"){
     out.plot<-out.plot+
       ggplot2::geom_line(data=data.frame(Day=stats::qgamma((0:100)/100,shape = model$summary.hyperpar[1,1],
@@ -308,12 +451,14 @@ plotSurvivalCurves<-function(model,data,year="all",reach="all",title,mult=1){
 #' @param survival a table of survival values, usually from SurvivalTable
 #' @param fixed.survival numeric; sets survival to a fixed value for all years/reaches
 #' @param mult numeric: a value to multiply the number of unique redds by, typically a spawner/redds ratio
+#' @param years integer; a vector of years to calculate escapement for
+#' @param reaches integer; a vector fo reach numbers to calculate escapement for
 #'
 #' @return a table of escapement values by year and reach
 #' @export
 #'
 #' @examples
-MakeEscapement<-function(streamvast,survival,fixed.survival=F,mult=1.62,years="all",reaches="all"){
+MakeEscapement<-function(streamvast,survival,fixed.survival=F,mult=1,years="all",reaches="all"){
 
   if(is.null(streamvast$escapedata)==F){warning("Overwriting previous escapement data")}
 
@@ -341,7 +486,7 @@ MakeEscapement<-function(streamvast,survival,fixed.survival=F,mult=1.62,years="a
     if(is.numeric(survival)==F | length(survival)>1){stop(" If using 'fixed.survival = TRUE',
                  then 'survival' should be a single number representing the average redd life in days")}
     good.escape$pred_Redds<-good.escape$pred_AUC/survival
-    good.escape$Redds_SD<-good.escape$pred_AUC/survival
+    good.escape$pred_Redds_SD<-good.escape$pred_AUC_SD/survival
     good.escape$pred_Redds_lower<-good.escape$pred_AUC_lower/survival
     good.escape$pred_Redds_upper<-good.escape$pred_AUC_upper/survival
 
@@ -353,16 +498,16 @@ MakeEscapement<-function(streamvast,survival,fixed.survival=F,mult=1.62,years="a
     for(i in 1:nrow(good.escape)){
       survival.match<-which(survival$Year==good.escape$Runyear[i] &
                               survival[,streamvast$reachname]==good.escape[i,streamvast$reachname])
-      good.escape$Redds[i]<-good.escape$pred_AUC[i]/survival$MedLife[survival.match]
-      good.escape$Redds_lower[i]<-good.escape$pred_AUC_lower[i]/survival$MedLife[survival.match]
-      good.escape$Redds_upper[i]<-good.escape$pred_AUC_upper[i]/survival$MedLife[survival.match]
-      good.escape$Redds_SD[i]<-good.escape$pred_AUC_SD[i]/survival$MedLife[survival.match]
+      good.escape$pred_Redds[i]<-good.escape$pred_AUC[i]/survival$MedLife[survival.match]
+      good.escape$pred_Redds_lower[i]<-good.escape$pred_AUC_lower[i]/survival$MedLife[survival.match]
+      good.escape$pred_Redds_upper[i]<-good.escape$pred_AUC_upper[i]/survival$MedLife[survival.match]
+      good.escape$pred_Redds_SD[i]<-good.escape$pred_AUC_SD[i]/survival$MedLife[survival.match]
     }
   }
-  good.escape$Escape<-good.escape$Redds*mult
-  good.escape$Escape_lower<-good.escape$Redds_lower*mult
-  good.escape$Escape_upper<-good.escape$Redds_upper*mult
-  good.escape$Escape_SD<-good.escape$Redds_SD*mult
+  good.escape$Escape<-good.escape$pred_Redds*mult
+  good.escape$Escape_lower<-good.escape$pred_Redds_lower*mult
+  good.escape$Escape_upper<-good.escape$pred_Redds_upper*mult
+  good.escape$Escape_SD<-good.escape$pred_Redds_SD*mult
 
   # now make the year totals, which will require dipping back into the simulations
   yearvec<-sort(unique(good.escape$Runyear))
@@ -414,17 +559,42 @@ MakeEscapement<-function(streamvast,survival,fixed.survival=F,mult=1.62,years="a
 #' @param obs.escape A vector of observed or reported escapement values; must be equal to the # of years in escape
 #' @param median should the plot show the predicted escapement based on the mle or the median of the posterior
 #' @param title character; a title to be passed to ggtitle
+#' @param years a vector of years to be included
+#' @param reaches a vector of reach numbers to be included
 #'
 #' @return either a ggplot object or a dataframe depending on the 'plot' option
 #' @export
 #'
 #' @examples
-plotEscapement<-function(streamvast,obs.escape,title,ribbons=NA,median=F){
+plotEscapement<-function(streamvast,obs.escape,title,ribbons=NA,median=F,years="all",reaches="all"){
 
-  escapetotals<-streamvast$escapedata$escapetotals
-  escapetotals$type<-"Predicted"
+  if(years[1]=="all" & reaches[1]=="all"){
+    escapetotals<-streamvast$escapedata$escapetotals
+    escapetotals$type<-"Predicted"
+    if(median){escapetotals$Escape<-escapetotals$Escape_median}
+    escapetotals<-escapetotals[,-which(names(escapetotals)%in%c("Escape_median","Escape_SD"))]
 
-  if(median){escapetotals$Escape<-escapetotals$Escape_median}
+
+  }else{
+    if(years[1]=="all"){years<-sort(unique(streamvast$escapedata$escapedata$Runyear))}
+    if(reaches[1]=="all"){reaches<-sort(unique(streamvast$escapedata$escapedata$Reach))}
+
+    escapedata<-subset(streamvast$escapedata$escapedata,Runyear%in%years &
+                         streamvast$escapedata$escapedata[,streamvast$reachname]%in%reaches)
+    escapetotals<-aggregate(escapedata[,c("Escape","Escape_lower","Escape_upper")],
+                            by=list(Runyear=escapedata$Runyear),FUN=sum)
+    if(median){
+      for(i in 1:nrow(escapetotals)){
+        yearreachsims<-streamvast$sims$escapesims[streamvast$sims$escapesims$Runyear==escapetotals$Runyear[i] &
+                                                    streamvast$sims$escapesims[,streamvast$reachname]%in%reaches,3:ncol(streamvast$sims$escapesims)]
+        yeartotals<-apply(yearreachsims,MARGIN=2,FUN=sum)
+        escapetotals$Escape[i]<-median(yeartotals)
+      }
+    }
+    names(escapetotals)[2]<-"Escape"
+    escapetotals$type<-"Predicted"
+  }
+
 
   # should we plot a confidence ribbon
   if(is.na(ribbons[1])==F){
@@ -449,14 +619,28 @@ plotEscapement<-function(streamvast,obs.escape,title,ribbons=NA,median=F){
                             ymin=NA,ymax=NA,ymin2=NA,ymax2=NA)
 
     for(i in 1:nrow(ribbon.data)){
-      yearsim<-streamvast$sims$escapetotalsims[streamvast$sims$escapetotalsims$Runyear==ribbon.data$Runyear[i],2:ncol(streamvast$sims$escapetotalsims)]
+
+      if(reaches[1]=="all"){
+        yearsim<-streamvast$sims$escapetotalsims[streamvast$sims$escapetotalsims$Runyear==ribbon.data$Runyear[i],2:ncol(streamvast$sims$escapetotalsims)]
+      }else{
+        yearreachsims<-streamvast$sims$escapesims[streamvast$sims$escapesims$Runyear==ribbon.data$Runyear[i] &
+                                                    streamvast$sims$escapesims[,streamvast$reachname]%in%reaches,3:ncol(streamvast$sims$escapesims)]
+        yearsim<-apply(yearreachsims,MARGIN=2,FUN=sum)
+      }
+
       rib<-as.integer(as.character(ribbon.data$ribbon[i]))
       ribbon.data$ymin[i]<-stats::quantile(unlist(yearsim),probs=lows[rib])
       ribbon.data$ymax[i]<-stats::quantile(unlist(yearsim),probs=lows[rib+1])
       ribbon.data$ymax2[i]<-stats::quantile(unlist(yearsim),probs=highs[rib])
       ribbon.data$ymin2[i]<-stats::quantile(unlist(yearsim),probs=highs[rib+1])
     }
+    # correct the confidence bounds if using a subset of the reaches
+    if(reaches[1]!="all"){
+      escapetotals$Escape_lower<-ribbon.data$ymin[ribbon.data$ribbon==1]
+      escapetotals$Escape_upper<-ribbon.data$ymax2[ribbon.data$ribbon==1]
+    }
   }
+
 
   if(missing(obs.escape)){
     obs.totals<-data.frame(Year=vector(),Escapement=vector(),lower=vector(),
@@ -466,7 +650,7 @@ plotEscapement<-function(streamvast,obs.escape,title,ribbons=NA,median=F){
       stop("Argument obs.escape must include columns named 'Year' and 'Escapement'!")
     }
     obs.totals<-data.frame(Runyear=obs.escape$Year,Escape=obs.escape$Escapement,Escape_lower=NA,
-                           Escape_median=NA,Escape_upper=NA,Escape_SD=NA,type="Reported")
+                           Escape_upper=NA,type="Reported")
   }
 
   escape.plot<-rbind(escapetotals,obs.totals)
@@ -494,4 +678,3 @@ plotEscapement<-function(streamvast,obs.escape,title,ribbons=NA,median=F){
 
   return(outplot)
 }
-
