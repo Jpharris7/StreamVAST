@@ -1586,6 +1586,7 @@ CheckNetwork<-function(network,root){
 }
 
 
+
 #This is a new function that separates out the survey tracks
 #' Makes sf LINESTRINGs representing survey transects
 #'
@@ -1630,16 +1631,33 @@ MakeSurveyTracks<-function(shape, surveys,surveys.crs="wgs84",save.col="all",
     shape.union<-sf::st_cast(shape.union,"LINESTRING")
   }
 
-  start.points0<-sf::st_as_sf(surveys,coords=survey.coords[1:2],crs=surveys.crs)
+  # to optimize processing, let's isolate unique sets of start/stop coordinates
+  unique.tracks<-unique(data.frame(surveys[,survey.coords]))
+
+  match.vec<-rep(NA,nrow(surveys))
+  for(i in 1:nrow(surveys)){
+    active.survey<-surveys[i,]
+
+    c1<-which(active.survey[,survey.coords[1]]==unique.tracks[,1])
+    c2<-which(active.survey[,survey.coords[2]]==unique.tracks[,2])
+    c3<-which(active.survey[,survey.coords[3]]==unique.tracks[,3])
+    c4<-which(active.survey[,survey.coords[4]]==unique.tracks[,4])
+
+    possible.matches<-unique(c(c1,c2,c3,c4))
+
+    match.vec[i]<-possible.matches[possible.matches%in%c1 & possible.matches%in%c2 &
+                                     possible.matches%in%c3 & possible.matches%in%c4]
+  }
+
+  start.points0<-sf::st_as_sf(unique.tracks,coords=1:2,crs=surveys.crs)
   start.points<-sf::st_transform(start.points0,crs=sf::st_crs(shape))
-  end.points0<-sf::st_as_sf(surveys,coords=survey.coords[3:4],crs=surveys.crs)
+  end.points0<-sf::st_as_sf(unique.tracks,coords=3:4,crs=surveys.crs)
   end.points<-sf::st_transform(end.points0,crs=sf::st_crs(shape))
 
   # Setup the output objects
-  out.shape<-sf::st_as_sf(shape.union[0])
-  sf::st_geometry(out.shape)<-"geometry"
-  good.surveys<-NULL
-  bad.coords<-NULL
+  match.dat<-data.frame(Index=1:nrow(unique.tracks),Valid_Geo=NA)
+  match.dat<-sf::st_set_geometry(match.dat,sf::st_sfc(rep(list(sf::st_linestring()),
+                                                          nrow(match.dat)),crs=sf::st_crs(shape)))
 
   # loop through and make a feature collection of the survey lines
   pb<-utils::txtProgressBar(min = 0, max = nrow(start.points), initial = 0, style=3)
@@ -1715,24 +1733,28 @@ MakeSurveyTracks<-function(shape, surveys,surveys.crs="wgs84",save.col="all",
       if(nrow(new.shape)>0){
         new.shape<-sf::st_as_sf(sf::st_line_merge(sf::st_combine(new.shape)))
         sf::st_geometry(new.shape)<-"geometry"
-        out.shape<-rbind(out.shape,new.shape)
-        good.surveys<-c(good.surveys,i)
+        match.dat$Valid_Geo[i]<-T
+        st_geometry(match.dat)[i]<-st_geometry(new.shape)
       }else{
-        bad.coords<-c(bad.coords,i)
+        match.dat$Valid_Geo[i]<-F
       }
+    }else{
+      match.dat$Valid_Geo[i]<-F
     }
     utils::setTxtProgressBar(pb,i)
   }
   close(pb)
 
-  if(length(bad.coords)>0){
-    print(paste0("Warning: Removed ",length(bad.coords), " surveys due to bad coordinates!"))
-    print(paste0("Effected survey indices : ",paste(bad.coords,collapse = ", ")))
+  # Attach the other data and return
+  out.shape<-cbind(surveys[,save.col],match.dat$geometry[match.vec])
+  sf::st_geometry(out.shape)<-"geometry"
+
+  if(sum(match.dat$Valid_Geo==F)>0){
+    print(paste0("Warning: Removed ",sum(sf::st_is_empty(out.shape$geometry)), " surveys due to bad coordinates!"))
   }
 
-  # Attach the other data and return
-  out.shape<-cbind(out.shape,surveys[good.surveys,save.col])
-  sf::st_geometry(out.shape)<-"geometry"
+  out.shape<-out.shape[sf::st_is_empty(out.shape$geometry)==F,]
+
   return(out.shape)
 }
 

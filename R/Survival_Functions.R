@@ -524,7 +524,6 @@ plotSurvivalCurves<-function(streamvast,data,year="all",reach="all",title,mult=1
       gg.seg.table$Surv[start:end]<-1-stats::pweibull(xseq[1:100]/mult,shape=surv.table$Shape[i],
                                                       scale=surv.table$Scale[i])
       scale<-surv.table$Scale[i]
-
     }
   }
   if(year[1]!="all"){gg.seg.table<-subset(gg.seg.table,Year%in%year)}
