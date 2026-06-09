@@ -135,8 +135,6 @@ MakeReddSurvival<-function(streamvast,redds,redd.ids="redd_name_txt",redd.crs="w
 }
 
 
-
-
 #' Make an adjacency matrix from an sf object
 #'
 #' @param reaches a sf object with LINESTRING geometry representing a stream network
@@ -487,7 +485,6 @@ plotSurvivalHistogram<-function(table,year="all",reach="all",title){
 }
 
 
-
 #' Plot survival curves from a INLA survival model
 #'
 #' @param streamvast a streamvast obect with a survival table
@@ -680,17 +677,23 @@ MakeEscapement<-function(streamvast,fixed.survival=NA,mult=1,years="all",reaches
 
 
     yearsim<-streamvast$sims$aucsims[picks,]
-    yearsurvival<-subset(survivaltable,Year==escapetotals$Runyear[y])
-    if(sim.check & dim.check){
-      yearreachsurv<-streamvast$sims$survivalsims[picks,3:ncol(streamvast$sims$survivalsims)]
+
+    if(is.numeric(fixed.survival) & length(fixed.survival)==1){
+      yearreachsurv<-fixed.survival
     }else{
-      yearreachsurv<-yearsurvival$ExpLife[match(yearsim[,reachname],yearsurvival$Reach)]
+      yearsurvival<-subset(survivaltable,Year==escapetotals$Runyear[y])
+      if(sim.check & dim.check){
+        yearreachsurv<-streamvast$sims$survivalsims[picks,3:ncol(streamvast$sims$survivalsims)]
+      }else{
+        yearreachsurv<-yearsurvival$ExpLife[match(yearsim[,reachname],yearsurvival$Reach)]
+      }
     }
     yearescapesim<-(yearsim[,3:ncol(yearsim)]/yearreachsurv)*mult
     yeartotals<-apply(yearescapesim,MARGIN=2,FUN=sum)
 
     escapesims[picks,3:ncol(escapesims)]<-yearescapesim
     escapetotalsims[y,2:ncol(escapetotalsims)]<-yeartotals
+
 
     escapetotals$Escape[y]<-sum(good.escape$Escape[good.escape$Runyear==escapetotals$Runyear[y]])
     escapetotals$Escape_lower[y]<-stats::quantile(yeartotals,probs=.025)

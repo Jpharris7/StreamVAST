@@ -1350,6 +1350,7 @@ PruneNetwork<-function(network,root,exclude,match,tolerance=100,plot=T){
     #if(any(sf::st_geometry_type(match)))){stop("Multiple geometry types in match argument")}
 
     match2<-sf::st_sfc(unique(sf::st_geometry(match)),crs=sf::st_crs(match))
+    match2<-match2[st_is_empty(match2)==F]
 
     network2<-Makesfnetwork(good.edges1,attach.data = F)
     network2<-RootNetwork(network2,root = root.sf)
@@ -1899,41 +1900,22 @@ FixLoops<-function(network,root,guides=NULL){
 }
 
 
-# New version assumes that the MakeSurveyTracks function has already been used, makes things simpler
-#' Combines survey tracks, counts, and a network into a data frame
+#' AssignEffort
 #'
-#' This function takes an sfnetwork or sf shape, a set of surveys, and optionally a set of
-#' georeferenced redds observations, and returns a data set with the effort assigned to each reach
-#' and the count types associated with that observation date.
-#'
-#' Error Note: can cause reach numbers to be misassigned under some circumstances
-#' Need to investigate further and then fix. In meantime, always be sure to check outputs.
+#' Matches surveys to reaches and computes the level of effort associated with each
+#' reach from each survey
 #'
 #' @param shape A sf object with LINESTRING geometries, or a sfnetwork
-#' @param georedds An optional dataframe with coordinates for each redd observation
-#' @param georedds.type An optional name for the column with classification of redds
-#' @param georedds.coords A character vector with the column names for lon/lat in georedds
-#' @param reddcrs A crs for the coordinates in georedds
-#' @param tolerance.redds A maximum distance for snapping redds to the shape
-#' @param tolerance.surveys A maximum distance for snapping surveys to the shape (should be small)
 #' @param surveys A sf object with LINESTRINGs representing surveys
-#' @param survey.redds optional name of a column with survey counts
 #' @param dist.units a character string for the units
+#' @param tolerance A maximum distance for snapping surveys to the shape (should be small)
+#' @param key character string; optional name of a column present in both surveys and georedds, used for matching
 #'
-#' @return a dataframe with dates, counts, and effort for each surveyed location
+#' @returns
 #' @export
 #'
 #' @examples
-AssembleReddData<-function(shape,                 # shape or network organized into reaches
-                           georedds=NA,           # data frame with a redd in each row
-                           georedds.type=NA,      # name of a column to sort redds by, counts are then kept separately
-                           georedds.coords=NA,    # vector of length two with the names of the lon/lat columns
-                           reddcrs="wgs84",       # crs for the redd coordinates
-                           tolerance.redds=250,   # maximum distance for matching redds to a reach
-                           tolerance.surveys=10,  # maximum distance for matching surveys to a reach; should be small
-                           surveys,               # data frame containing
-                           survey.redds=NA,      # name for the column with redd counts
-                           dist.units){
+AssignEffort<-function(shape,surveys,dist.units,tolerance=10,key){
 
   if(inherits(shape,"sfnetwork")){
     shape.edges<-sf::st_as_sf(sfnetworks::activate(shape,"edges"))
@@ -1952,135 +1934,44 @@ AssembleReddData<-function(shape,                 # shape or network organized i
     units::as_units(test,dist.units)
   }
 
-  #remove some surveys
-  if(is.na(survey.redds)==F){
-    good.surveys<-surveys[is.na(as.data.frame(surveys)[,survey.redds])==F,]
-  }else{
-    good.surveys<-surveys
+  no.key<-F
+  if(missing(key)){
+    warning("It is advisable to assign a 'key' or unique identifier to each survey event.")
+    no.key<-T
+    key<-"tempID"
+    surveys$tempID<-1:nrow(surveys)
   }
-  good.surveys$tempID<-1:nrow(good.surveys)
 
-  # some setup
-  surveys.dat<-as.data.frame(good.surveys)
-  day.col<-which(tolower(names(surveys.dat))=="day")
-  year.col<-which(tolower(names(surveys.dat))=="year")
+  # Setup
+  day.col<-which(tolower(names(as.data.frame(surveys)))=="day")
+  year.col<-which(tolower(names(as.data.frame(surveys)))=="year")
+  key.col<-which(tolower(names(as.data.frame(surveys)))==key)
   if(length(year.col)!=1 | length(day.col)!=1){stop("Please ensure your survey data contains columns named 'Year' and 'Day'")}
 
-  # Setup any georeferenced redds, should improve handling of dates so that it's not just assumed to be in
-  # correct format
-  if(is.data.frame(georedds)){
-    print("Formatting georeferenced counts")
-    if(inherits(georedds,"sf")){
-      georedds.sf<-georedds
-    }else{
-      if(is.na(georedds.coords)[1]){
-        lon.col<-which(tolower(names(georedds))%in%c("longitude","lon","long","x"))[1]
-        lat.col<-which(tolower(names(georedds))%in%c("latitude","lat","y"))[1]
-      }else{
-        lon.col<-georedds.coords[1]
-        lat.col<-georedds.coords[2]
-      }
+  # determine how many unique shapes we have and book-keeping
+  unique.matrix<-st_equals(surveys$geometry)
 
-      badrow<-which(is.na(georedds[,lon.col]) | is.na(georedds[,lat.col]))
-      if(length(badrow)>0){
-        georedds.sf<-sf::st_as_sf(georedds[-badrow,],coords=c(lon.col,lat.col),crs=reddcrs)
-      }else{
-        georedds.sf<-sf::st_as_sf(georedds,coords=c(lon.col,lat.col),crs=reddcrs)
-      }
+  reference.tracks<-NULL
+  accounted<-NULL
+  for(i in 1:nrow(unique.matrix)){
+    if(i%in%c(reference.tracks,accounted)==F){
+      reference.tracks<-c(reference.tracks,i)
+      accounted<-c(accounted,unique.matrix[[i]][-1])
     }
-    georedds.sf2<-sf::st_transform(georedds.sf,crs=sf::st_crs(shape))
-
-    closest.reach<-shape.edges$Reach[sf::st_nearest_feature(x=georedds.sf2,shape.edges)]
-    closest.dists<-sf::st_distance(georedds.sf2,shape.edges[match(closest.reach,shape.edges$Reach),],by_element = T)
-
-    georedds.sf2$closest<-closest.reach
-    georedds.sf3<-georedds.sf2[which(as.integer(closest.dists)<=tolerance.redds),]
-
-    redd.day.col<-which(tolower(names(georedds.sf3))=="day")
-    redd.year.col<-which(tolower(names(georedds.sf3))=="year")
-
-    if(length(redd.day.col)!=1 | length(redd.year.col)!=1){
-      stop("Georeferenced redd data must have columns named for the 'Year' and julian 'Day'")
-    }
-
-    names(georedds.sf3)[redd.day.col]<-"Day"
-    names(georedds.sf3)[redd.year.col]<-"Year"
-
-    georedds.sf3$tempID<-NA
-    # need to match redds to surveys
-    pb<-utils::txtProgressBar(min = 0, max = nrow(georedds.sf3), initial = 0, style=3)
-    for(i in 1:nrow(georedds.sf3)){
-      good.surveys2<-good.surveys[surveys.dat[,year.col]==as.data.frame(georedds.sf3)[i,redd.year.col] &
-                                    surveys.dat[,day.col]==as.data.frame(georedds.sf3)[i,redd.day.col],]
-      if(nrow(good.surveys2)>0){
-        survey.dists<-sf::st_length(sf::st_nearest_points(georedds.sf3[i,],good.surveys2))
-
-        georedds.sf3$tempID[i]<-good.surveys2$tempID[which.min(survey.dists)]
-      }
-      utils::setTxtProgressBar(pb,i)
-    }
-    close(pb)
-    sf::st_geometry(georedds.sf3)<-"geometry"
-    georedds.sf3<-georedds.sf3[is.na(georedds.sf3$tempID)==F,c("Year","Day","closest","tempID")]
-  }else{
-    georedds.sf3<-NULL
   }
 
-  # There are a lot of potential ways to assign non-georeferenced redds, but for now
-  # we will just assume even spacing along the survey line
-  # need to improve method of handling dates
-  # Also need to adjust to ensure it functions when there are no survey redds
-  print("Geo-locating Survey Redds w/o GPS")
-  if(is.na(survey.redds)==F){
-    has.redds<-which(as.data.frame(good.surveys)[,survey.redds]>0)
+  # construct shapes for the each unique one
+  reference.success<-rep(F,length(reference.tracks))
+  eff.matrix<-matrix(nrow = length(reference.tracks),ncol=nrow(shape.edges),data = 0)
 
-    pb<-utils::txtProgressBar(min = 0, max = length(has.redds), initial = 0, style=3)
-
-    survey.redds.sf<-sf::st_as_sf(data.frame(Year=vector(),Day=vector(),closest=vector(),tempID=vector(),
-                                             x=vector(),y=vector()),coords=c("x","y"),crs=sf::st_crs(shape))
-    for(i in 1:length(has.redds)){
-      active.survey<-good.surveys[has.redds[i],]
-      redds<-as.data.frame(active.survey)[,survey.redds]
-
-      if(inherits(georedds.sf3,"sf")){
-        accounted.for<-georedds.sf3[georedds.sf3$tempID==active.survey$tempID,]
-      }else{
-        accounted.for<-data.frame(x=vector())
-      }
-
-      no.unaccounted<-redds-nrow(accounted.for)
-      if(no.unaccounted>0){
-
-        redds.sf<-sf::st_as_sf(sf::st_cast(sf::st_line_sample(active.survey,
-                                                              sample = (1:no.unaccounted)/(no.unaccounted+1)),"POINT"))
-        redds.sf$Year<-surveys.dat[has.redds[i],year.col]
-        redds.sf$Day<-surveys.dat[has.redds[i],day.col]
-
-        closest.reach<-shape.edges$Reach[sf::st_nearest_feature(x=redds.sf,shape.edges)]
-        closest.dists<-sf::st_distance(redds.sf,shape.edges[match(closest.reach,
-                                                                  shape.edges$Reach),],by_element = T)
-        redds.sf$closest<-closest.reach
-        redds.sf$tempID<-active.survey$tempID
-
-        survey.redds.sf<-rbind(survey.redds.sf,redds.sf[as.numeric(closest.dists)<=tolerance.redds,])
-      }
-      utils::setTxtProgressBar(pb,i)
-    }
-    sf::st_geometry(survey.redds.sf)<-"geometry"
-    close(pb)
-  }else{
-    survey.redds.sf<-NULL
-  }
-  good.redds<-rbind(survey.redds.sf,georedds.sf3)
-
-  pb<-utils::txtProgressBar(min = 0, max = nrow(good.surveys), initial = 0, style=3)
   print("Resolving Survey Effort & assigning Redds")
-  first.iter<-T
-  for(i in 1:nrow(good.surveys)){
+  pb<-utils::txtProgressBar(min = 0, max = length(reference.tracks), initial = 0, style=3)
+  for(i in 1:length(reference.tracks)){
 
-    overlapping<-which(sf::st_intersects(good.surveys[i,],shape.edges,sparse=F))
+    overlapping<-which(sf::st_intersects(surveys[reference.tracks[i],],shape.edges,sparse=F))
 
     if(length(overlapping)>0){
+      reference.success[i]<-T
       for(j in 1:length(overlapping)){
 
         # because of imperfect snapping, we're going to do this the harder way
@@ -2089,7 +1980,7 @@ AssembleReddData<-function(shape,                 # shape or network organized i
         reach.shape<-shape.edges[overlapping[j],]
         reach.points<-suppressWarnings(sf::st_cast(reach.shape,"POINT"))
 
-        good.points<-which(as.numeric(sf::st_length(sf::st_nearest_points(reach.points,good.surveys[i,])))<tolerance.surveys)
+        good.points<-which(as.numeric(sf::st_length(sf::st_nearest_points(reach.points,surveys[reference.tracks[i],])))<tolerance)
 
         # assume that any gaps are an error in snapping the shapes together
         # might cause problems if we ever start working with multi-channel streams, but ok for now
@@ -2097,69 +1988,368 @@ AssembleReddData<-function(shape,                 # shape or network organized i
         reach.intersection<-sf::st_cast(sf::st_combine(reach.points[line.points,]),"LINESTRING")
         intersection.length<-sf::st_length(reach.intersection)
 
-        # drop very small intersections,
-        if(as.numeric(intersection.length/sf::st_length(reach.shape))>.02){
-          out.dat<-data.frame(Year=surveys.dat[i,year.col],
-                              Day=surveys.dat[i,day.col],
-                              Reach=overlapping[j],
-                              Effort=intersection.length)
-
-          active.redds<-good.redds[good.redds$closest==overlapping[j] &
-                                     good.redds$tempID==good.surveys$tempID[i],]
-
-          if(is.na(georedds.type)){
-            Redd.counts<-data.frame(Redds=nrow(active.redds))
-            redd.codes<-NA
-          }else{
-            redd.codes<-unique(as.data.frame(good.redds)[,georedds.type])
-            Redd.counts<-as.data.frame(matrix(nrow=1,ncol=length(redd.codes),data=0))
-            names(Redd.counts)<-paste("Redds",redd.codes,sep="_")
-            for(t in 1:length(redd.codes)){
-              Redd.counts[1,t]<-length(which(as.data.frame(active.redds)[,georedds.type]==redd.codes[t]))
-            }
-          }
-          if(first.iter){
-            out.data<-cbind(out.dat,Redd.counts)
-            first.iter<-F
-          }else{
-            out.data<-rbind(out.data,cbind(out.dat,Redd.counts))
-          }
-        }
+        eff.matrix[i,overlapping[j]]<-as.numeric(units::set_units(intersection.length,dist.units,mode="standard"))
       }
     }
     utils::setTxtProgressBar(pb,i)
   }
   close(pb)
 
-  # Need to fix cases where the same reach is covered partially by two surveys
-  # in future, may wish to preserve this difference, would require attaching a survey id to the data
-  # Will need updating when it is time to work with surveys that don't have georeferenced redds
-  doubles<-names(which(table(paste(out.data$Year,out.data$Day,out.data$Reach,sep="_"))>1))
-  if(length(doubles)>0){
-    for(i in 1:length(doubles)){
-      y<-strsplit(doubles[i],split="_")[[1]][1]
-      d<-strsplit(doubles[i],split="_")[[1]][2]
-      r<-strsplit(doubles[i],split="_")[[1]][3]
+  # Match each survey to the corresponding unique shape
+  eff.matrix.full<-matrix(nrow=nrow(surveys),ncol=nrow(shape.edges),data=0)
 
-      d.rows<-which(out.data$Year==y & out.data$Day==d & out.data$Reach==r)
-      d.data<-out.data[d.rows,]
-
-      new.data<-data.frame(Year=as.integer(y),Day=as.integer(d),Reach=as.integer(r),
-                           Effort=sum(d.data$Effort))
-      if(length(redd.codes)==1){new.redds<-data.frame(Redds=sum(d.data$Redds))}
-      if(length(redd.codes)>1){new.redds<-t(as.data.frame(apply(d.data[,-(1:4)],MARGIN=2,FUN=sum)))}
-      out.data<-rbind(out.data[-d.rows,],cbind(new.data,new.redds))
-    }
+  for(i in 1:nrow(surveys)){
+    eff.matrix.full[i,]<-eff.matrix[which(reference.tracks==min(unique.matrix[[i]])),]
   }
+  colnames(eff.matrix.full)<-paste0("R",1:ncol(eff.matrix.full))
+
+  # clean things up and make a nice output
+  out.data<-as.data.frame(surveys)[,c(key.col,year.col,day.col)]
+  out.data$SurveyLength<-as.numeric(units::set_units(st_length(surveys),dist.units,mode="standard"))
+  out.data$AssignedLength<-apply(eff.matrix.full,1,sum)
+
+  return(cbind(out.data,eff.matrix.full))
+}
+
+
+#' Combines survey tracks and stream network into dataframe of counts.
+#'
+#' This function takes an sfnetwork or sf shape, a set of surveys, an effort matrix and
+#'  optionally a set of georeferenced observations, and returns a dataframe with each survey
+#'  and the counts assigned to each reach associated with that survey
+#'
+#' Error Note: can cause reach numbers to be mis-assigned under some circumstances
+#' Need to investigate further and then fix. In meantime, always be sure to check outputs.
+#'
+#' @param shape A sf object with LINESTRING geometries, or a sfnetwork
+#' @param geodata An optional dataframe with coordinates for each observation
+#' @param geodata.coords A character vector with the column names for lon/lat in georedds
+#' @param geodata.counts character; name of the column with count for each observation; if missing assumes 1 count per line
+#' @param geodata.crs A crs for the coordinates in geodata
+#' @param tolerance A maximum distance for snapping observations to the shape
+#' @param surveys A sf object with LINESTRINGs representing surveys
+#' @param survey.counts optional name of a column with survey counts
+#' @param key character string; optional name of a column present in both surveys and geodata, used for matching
+#' @param format.output logical; the Format Counts function can usually be run using the same arguments, skipping an extra function call
+#'
+#' @return a dataframe with dates, counts, and effort for each surveyed location
+#' @export
+#'
+#' @examples
+AssignCounts<-function(shape,surveys,effort,survey.counts,geodata=NA,geodata.counts,
+                       geodata.crs,geodata.coords,tolerance=250,key,format.output=F){
+
+  if(inherits(shape,"sfnetwork")){
+    shape.edges<-sf::st_as_sf(sfnetworks::activate(shape,"edges"))
+  }else(
+    shape.edges<-shape
+  )
+
+  if(any(survey.counts%in%names(surveys)==F)){stop("Invalid entry for survey.counts. Column not found.")}
+  if(any(is.na(as.data.frame(surveys)[,survey.counts]))){stop("NAs detected in survey counts. Remove NAs and try again!!")}
+
+  if(nrow(surveys)!=nrow(effort)){stop("Data for 'effort' and 'surveys' must have equal rows ")}
+
+  no.key<-F
+  if(missing(key)){
+    no.key<-T
+    key<-"tempID"
+    surveys$tempID<-1:nrow(surveys)
+  }
+
+  # Set up the final data object
+  reach.cols<-6:ncol(effort)
+  count.dat<-as.data.frame(matrix(nrow=nrow(effort),ncol=length(reach.cols),data=0))
+  colnames(count.dat)<-names(effort)[6:ncol(effort)]
+
+
+  # some setup
+  surveys.dat<-as.data.frame(surveys)
+  day.col<-which(tolower(names(surveys.dat))=="day")
+  year.col<-which(tolower(names(surveys.dat))=="year")
+  if(length(year.col)!=1 | length(day.col)!=1){stop("Please ensure your survey data contains columns named 'Year' and 'Day'")}
+
+  out.data<-effort[,1:4]
+  out.data$SurveyCount<-surveys.dat[match(out.data[,key],surveys.dat[,key]),survey.counts]
+
+  if(missing(geodata.crs)){geodata.crs<-sf::st_crs(shape.edges)}
+
+  # Setup any georeferenced redds, should improve handling of dates so that it's not just assumed to be in
+  # correct format
+  ##########################################
+  if(inherits(geodata,"data.frame")){
+    print("Formatting georeferenced counts")
+    if(inherits(geodata,"sf")){
+      geodata.sf<-geodata
+    }else{
+      if(missing(geodata.coords)){
+        lon.col<-which(tolower(names(geodata))%in%c("longitude","lon","long","x"))[1]
+        lat.col<-which(tolower(names(geodata))%in%c("latitude","lat","y"))[1]
+      }else{
+        lon.col<-geodata.coords[1]
+        lat.col<-geodata.coords[2]
+      }
+
+      badrow<-which(is.na(geodata[,lon.col]) | is.na(geodata[,lat.col]))
+      if(length(badrow)>0){
+        geodata.sf<-sf::st_as_sf(geodata[-badrow,],coords=c(lon.col,lat.col),crs=geodata.crs)
+      }else{
+        geodata.sf<-sf::st_as_sf(geodata,coords=c(lon.col,lat.col),crs=geodata.crs)
+      }
+    }
+    if(missing(geodata.counts)){
+      geodata.counts<-"Temp_count"
+      geodata.sf$Temp_count<-1
+    }
+
+    geodata.sf2<-sf::st_transform(geodata.sf,crs=sf::st_crs(shape))
+
+    closest.reach<-shape.edges$Reach[sf::st_nearest_feature(x=geodata.sf2,shape.edges)]
+    closest.dists<-sf::st_distance(geodata.sf2,shape.edges[match(closest.reach,shape.edges$Reach),],by_element = T)
+
+    geodata.sf2$closest<-closest.reach
+    geodata.sf3<-geodata.sf2[which(as.integer(closest.dists)<=tolerance),]
+
+    geodata.day.col<-which(tolower(names(geodata.sf3))=="day")
+    geodata.year.col<-which(tolower(names(geodata.sf3))=="year")
+
+    if(length(geodata.day.col)!=1 | length(geodata.year.col)!=1){
+      stop("Georeferenced count data must have columns named for the 'Year' and julian 'Day'")
+    }
+    names(geodata.sf3)[geodata.day.col]<-"Day"
+    names(geodata.sf3)[geodata.year.col]<-"Year"
+
+    # need to match redds to surveys
+    if(no.key){
+      geodata.sf3[,key]<-NA
+      pb<-utils::txtProgressBar(min = 0, max = nrow(geodata.sf3), initial = 0, style=3)
+
+      for(i in 1:nrow(geodata.sf3)){
+        surveys2<-surveys[surveys.dat[,year.col]==as.data.frame(geodata.sf3)[i,geodata.year.col] &
+                            surveys.dat[,day.col]==as.data.frame(geodata.sf3)[i,geodata.day.col],]
+        if(nrow(surveys2)>0){
+          survey.dists<-sf::st_length(sf::st_nearest_points(geodata.sf3[i,],surveys2))
+
+          geodata.sf3[i,key]<-surveys2[which.min(survey.dists),key]
+        }
+        utils::setTxtProgressBar(pb,i)
+      }
+      close(pb)
+    }
+    sf::st_geometry(geodata.sf3)<-"geometry"
+    geodata.sf3<-geodata.sf3[is.na(as.data.frame(geodata.sf3)[,key])==F,c(key,"Year","Day","closest",geodata.counts)]
+
+    nosurveymatch<-subset(geodata.sf3,as.data.frame(geodata.sf3)[,key]%in%out.data[,key]==F)
+    if(nrow(nosurveymatch)>0){
+      print(paste0("Warning: ",sum(as.data.frame(nosurveymatch)[,geodata.counts]),
+                   " georeferenced counts could not be matched to a valid survey"))
+    }
+    geodata.sf3<-subset(geodata.sf3,as.data.frame(geodata.sf3)[,key]%in%out.data[,key])
+
+    geodata.sums<-aggregate(list(count=as.data.frame(geodata.sf3)[,geodata.counts]),
+                            by=list(key=as.data.frame(geodata.sf3)[,key]),FUN=sum)
+    out.data$GeoCount<-0
+    match.vec<-match(geodata.sums$key,out.data[,key])
+    out.data$GeoCount[match.vec]<-geodata.sums$count
+  }else{
+    geodata.sf3<-NULL
+    geodata.counts<-survey.counts
+  }
+
+  ##########################################
+  print("Geo-locating Survey counts w/o GPS")
+  if(is.na(survey.counts)==F){
+    has.poscount<-which(as.data.frame(surveys)[,survey.counts]>0)
+
+    pb<-utils::txtProgressBar(min = 0, max = length(has.poscount), initial = 0, style=3)
+
+    suppressWarnings(
+      survey.counts.sf<-sf::st_as_sf(data.frame(Year=vector(),Day=vector(),closest=vector(),
+                                                x=vector(),y=vector()),coords=c("x","y"),crs=sf::st_crs(shape))
+    )
+    for(i in 1:length(has.poscount)){
+      active.survey<-surveys[has.poscount[i],]
+      active.count<-as.data.frame(active.survey)[,survey.counts]
+
+      if(inherits(geodata.sf3,"sf")){
+        accounted.for<-geodata.sf3[as.data.frame(geodata.sf3)[,key]==as.data.frame(active.survey)[,key],]
+        no.unaccounted<-active.count-sum(as.data.frame(accounted.for)[,geodata.counts])
+      }else{
+        no.unaccounted<-active.count
+      }
+
+      if(no.unaccounted>0){
+        count.sf<-sf::st_as_sf(sf::st_cast(sf::st_line_sample(active.survey,
+                                                              sample = (1:no.unaccounted)/(no.unaccounted+1)),"POINT"))
+        count.sf$Year<-surveys.dat[has.poscount[i],year.col]
+        count.sf$Day<-surveys.dat[has.poscount[i],day.col]
+
+        closest.reach<-shape.edges$Reach[sf::st_nearest_feature(x=count.sf,shape.edges)]
+        closest.dists<-sf::st_distance(count.sf,shape.edges[match(closest.reach,
+                                                                  shape.edges$Reach),],by_element = T)
+        count.sf$closest<-closest.reach
+        count.sf[,key]<-as.data.frame(active.survey)[,key]
+
+        survey.counts.sf<-rbind(survey.counts.sf,count.sf[as.numeric(closest.dists)<=tolerance,])
+      }
+      utils::setTxtProgressBar(pb,i)
+    }
+    sf::st_geometry(survey.counts.sf)<-"geometry"
+    survey.counts.sf[,geodata.counts]<-1
+    close(pb)
+  }else{
+    survey.counts.sf<-NULL
+    survey.counts<-geodata.counts
+  }
+
+  #############################################################
+  # Assign all the counts to the appropriate spot in the matrix
+  print("Assigning Counts")
+  pb<-utils::txtProgressBar(min = 0, max = nrow(out.data), initial = 0, style=3)
+
+  for(i in 1:nrow(out.data)){
+
+    active.key<-out.data[i,key]
+
+    active.geosums<-data.frame(Reach=vector(),count=vector())
+    if(inherits(geodata.sf3,"data.frame")){
+      active.geocount<-as.data.frame(geodata.sf3[as.data.frame(geodata.sf3)[,key]==active.key,])
+      if(nrow(active.geocount)>0){
+        active.geosums<-aggregate(list(count=active.geocount[,geodata.counts]),
+                                  by=list(Reach=active.geocount$closest),FUN=sum)
+      }
+    }
+
+    active.surveysums<-data.frame(Reach=vector(),count=vector())
+    if(nrow(survey.counts.sf)>0){
+      active.surveycount<-as.data.frame(survey.counts.sf[as.data.frame(survey.counts.sf)[,key]==active.key,])
+      if(nrow(active.surveycount)>0){
+        active.surveysums<-aggregate(list(count=active.surveycount[,geodata.counts]),
+                                     by=list(Reach=active.surveycount$closest),FUN=sum)
+      }
+    }
+
+    active.sums<-rbind(active.geosums,active.surveysums)
+    if(nrow(active.sums)>0){
+      active.sums<-aggregate(list(count=active.sums$count),
+                             by=list(Reach=active.sums$Reach),FUN=sum)
+
+      count.dat[i,active.sums$Reach]<-active.sums$count
+    }
+    utils::setTxtProgressBar(pb,i)
+  }
+  close(pb)
+  out.data$AssignedCount<-apply(count.dat,1,sum)
+
+  # If you want to skip a step, the Format Counts function can be run
+  # using the same arguments
+  if(format.output==T){
+    return(FormatCounts(countdata = cbind(out.data,count.data),effort = effort,shape = shape,
+                        merge = T,key = key))
+  }
+
+  return(cbind(out.data,count.dat))
+}
+
+
+#' Formats counts and effort along with spatial data for use in models
+#'
+#' This function combines the output of the EffortMatrix and AssignCounts functions
+#'
+#' @param countdata dataframe of counts from the AssignCounts function
+#' @param effort dataframe of effort from the AssignEffort function
+#' @param shape A sf object with LINESTRING geometries, or a sfnetwork
+#' @param merge logical; should observations of the same reach on the same date be combined (recommended)
+#' @param key character; optional; name of a column present in both countdata and effort, used for matching
+#'
+#' @returns
+#' @export
+#'
+#' @examples
+FormatCounts<-function(countdata,effort,shape,merge=T,key){
+
+  if(inherits(shape,"sfnetwork")){
+    shape.edges<-sf::st_as_sf(sfnetworks::activate(shape,"edges"))
+  }else(
+    shape.edges<-shape
+  )
+  shape.dat<-as.data.frame(shape.edges)
+
+  stream.name.col<-which(tolower(names(shape.edges))%in%c("strm_name","stream","stream_name","gnis_name"))
+
+  if(nrow(countdata)!=nrow(effort)){stop("Countdata and effort should have same # of rows")}
+
+  outdata<-as.data.frame(matrix(nrow=0,ncol=10))
+  names(outdata)<-c("Year","Day","Reach","Effort","Count","Stream","habitat",
+                    "root","parent",key)
+
+
+  print("Formating effort and countdata to fit streamvast structure")
+  pb<-utils::txtProgressBar(min = 0, max = nrow(effort), initial = 0, style=3)
+
+  nbad<-0
+  reachcols<-which(names(countdata)=="R1")-1
+
+  for(i in 1:nrow(effort)){
+
+    effort.reaches<-which(effort[i,6:ncol(effort)]>0)
+    count.reaches<-which(countdata[i,8:ncol(countdata)]>0)
+
+    add.reaches<-sort(unique(effort.reaches,count.reaches))
+
+    if(length(add.reaches)>0){
+      outdata0<-data.frame(Year=effort$Year[i],Day=effort$Day[i],Reach=add.reaches,
+                           Effort=unlist(effort[i,5+add.reaches]),
+                           Count=unlist(countdata[i,reachcols+add.reaches]),
+                           Stream=shape.dat[add.reaches,stream.name.col],
+                           habitat=shape.dat$habitat[add.reaches],
+                           root=shape.dat$root[add.reaches],
+                           parent=shape.dat$parent[add.reaches],
+                           key=effort[i,key])
+      names(outdata0)[10]<-key
+
+      outdata<-rbind(outdata,outdata0)
+    }else{
+      nbad<-nbad+1
+    }
+    utils::setTxtProgressBar(pb,i)
+  }
+  close(pb)
+
+  print(paste0("Warning: removed ",nbad," surveys with zero assigned counts and effort."))
+
+  if(merge==T){
+    # Let's fix some problems
+    # Start with doubles
+    print("Combining overlapping survey events")
+    old.nrows<-nrow(outdata)
+    doubles<-names(which(table(paste(outdata$Year,outdata$Day,outdata$Reach,sep="_"))>1))
+    if(length(doubles)>0){
+      for(i in 1:length(doubles)){
+        y<-strsplit(doubles[i],split="_")[[1]][1]
+        d<-strsplit(doubles[i],split="_")[[1]][2]
+        r<-strsplit(doubles[i],split="_")[[1]][3]
+
+        double.rows<-which(outdata$Year==y & outdata$Day==d & outdata$Reach==r)
+        double.data<-outdata[double.rows,]
+
+        new.data<-double.data[1,]
+        new.data$Effort<-sum(double.data$Effort)
+        new.data$Count<-sum(double.data$Count)
+        new.data[,key]<-paste(double.data[,key],collapse = ",")
+
+        outdata<-rbind(outdata[-double.rows,],new.data)
+      }
+    }
+    new.nrows<-nrow(outdata)
+    print(paste0("Combined ",old.nrows-new.nrows," overlapping reach observations"))
+  }
+  # Consider an automatic adjustment to drop low effort rows and redistribute
+  # any counts/effort
+
   # carry over any covariates
-  var.col<-names(shape.edges)[names(shape.edges)%in%c("from","to","Reach","geometry")==F]
-  reach.match<-match(out.data$Reach,shape.edges$Reach)
-  out.data<-cbind(out.data,as.data.frame(shape.edges)[reach.match,var.col])
-  rownames(out.data)<-NULL
-
-  out.data$Effort<-as.numeric(units::set_units(out.data$Effort,dist.units,mode="standard"))
-
-  return(out.data)
+  # May want to consider carrying over any covariates attached to the shape object
+  return(outdata)
 }
 
 
