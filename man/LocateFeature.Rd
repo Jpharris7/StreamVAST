@@ -4,12 +4,14 @@
 \alias{LocateFeature}
 \title{Locate a feature on a shape or network}
 \usage{
-LocateFeature(shape, type)
+LocateFeature(shape, type = "s", guide)
 }
 \arguments{
 \item{shape}{A sf object with LINESTRING geometry or a sfnetwork}
 
 \item{type}{Either "POINT", "VERTEX" or "SEGMENT" which indicates the type of shape to select}
+
+\item{guide}{An sf object that is plotted to help the user identify important shapes}
 }
 \value{
 A sf object containing the POINTS or LINESTRINGS selected by the user

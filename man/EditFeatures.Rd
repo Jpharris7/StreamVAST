@@ -4,12 +4,14 @@
 \alias{EditFeatures}
 \title{Edit a shape or network in real time}
 \usage{
-EditFeatures(shape, root)
+EditFeatures(shape, root, guide)
 }
 \arguments{
 \item{shape}{A sf or sfnetworks object to be editted}
 
 \item{root}{A sf POINT for the root (might be obsolete)}
+
+\item{guide}{An sf object that is plotted to help the user identify important shapes}
 }
 \value{
 A sf or sfnetworks object with the user specificed alterations

@@ -4,10 +4,17 @@
 \alias{plotSurvivalCurves}
 \title{Plot survival curves from a INLA survival model}
 \usage{
-plotSurvivalCurves(model, data, year = "all", reach = "all", title, mult = 1)
+plotSurvivalCurves(
+  streamvast,
+  data,
+  year = "all",
+  reach = "all",
+  title,
+  mult = 1
+)
 }
 \arguments{
-\item{model}{a fitted INLA survival model}
+\item{streamvast}{a streamvast obect with a survival table}
 
 \item{data}{a dataframe of redd observations, usually from MakeReddSurvival}
 

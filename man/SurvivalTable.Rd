@@ -2,18 +2,26 @@
 % Please edit documentation in R/Survival_Functions.R
 \name{SurvivalTable}
 \alias{SurvivalTable}
-\title{Summarize the results of a survival model in tabular form}
+\title{Summarize the results of a survival model in tabular form. Will also draw sims from the
+INLA survival model}
 \usage{
-SurvivalTable(model, extrayears)
+SurvivalTable(model, nsims = 0, extrayears, extramethod, streamvast, mult = 1)
 }
 \arguments{
 \item{model}{A fitted INLA survival model}
 
+\item{nsims}{A number of sims to draw from the joint posterior}
+
 \item{extrayears}{any years not present in the data for which an estimate is desired}
+
+\item{extramethod}{a function that will be applied to the data to extrapolate to new years}
+
+\item{mult}{a number to multiply ExpLife results; most used to convert units}
 }
 \value{
 an adjacency matrix used by INLA for spatial relationships
 }
 \description{
-Summarize the results of a survival model in tabular form
+Summarize the results of a survival model in tabular form. Will also draw sims from the
+INLA survival model
 }

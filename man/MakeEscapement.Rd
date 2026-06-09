@@ -6,9 +6,8 @@
 \usage{
 MakeEscapement(
   streamvast,
-  survival,
-  fixed.survival = F,
-  mult = 1.62,
+  fixed.survival = NA,
+  mult = 1,
   years = "all",
   reaches = "all"
 )
@@ -16,11 +15,13 @@ MakeEscapement(
 \arguments{
 \item{streamvast}{a fitted streamvast object with auc predictions}
 
-\item{survival}{a table of survival values, usually from SurvivalTable}
-
 \item{fixed.survival}{numeric; sets survival to a fixed value for all years/reaches}
 
 \item{mult}{numeric: a value to multiply the number of unique redds by, typically a spawner/redds ratio}
+
+\item{years}{integer; a vector of years to calculate escapement for}
+
+\item{reaches}{integer; a vector fo reach numbers to calculate escapement for}
 }
 \value{
 a table of escapement values by year and reach

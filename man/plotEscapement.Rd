@@ -4,7 +4,15 @@
 \alias{plotEscapement}
 \title{Make a plot of yearly escapement values}
 \usage{
-plotEscapement(streamvast, obs.escape, title, ribbons = NA, median = F)
+plotEscapement(
+  streamvast,
+  obs.escape,
+  title,
+  ribbons = NA,
+  median = F,
+  years = "all",
+  reaches = "all"
+)
 }
 \arguments{
 \item{obs.escape}{A vector of observed or reported escapement values; must be equal to the # of years in escape}
@@ -12,6 +20,10 @@ plotEscapement(streamvast, obs.escape, title, ribbons = NA, median = F)
 \item{title}{character; a title to be passed to ggtitle}
 
 \item{median}{should the plot show the predicted escapement based on the mle or the median of the posterior}
+
+\item{years}{a vector of years to be included}
+
+\item{reaches}{a vector of reach numbers to be included}
 
 \item{escape}{A table of escapement values, usually from MakeEscapement}
 }
